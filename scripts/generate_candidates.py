@@ -463,6 +463,8 @@ def main() -> None:
                         help=f"Minimum transformations per parent (default from config: {MIN_TRANSFORMS}).")
     parser.add_argument("--max-transforms", type=int, default=MAX_TRANSFORMS,
                         help=f"Maximum transformations per parent (default from config: {MAX_TRANSFORMS}).")
+    parser.add_argument("--query", type=str, default="",
+                        help="Original user input query that initiated this factor evolution run.")
     args = parser.parse_args()
 
     diag_path = Path(args.diagnosis)
@@ -505,6 +507,10 @@ def main() -> None:
         evo = json.loads(evo_path.read_text(encoding="utf-8-sig"))
     else:
         evo = {"nodes": [], "edges": [], "run_iteration": 0}
+
+    # ── Preserve or set the original user query ─────────────────────
+    if args.query and not evo.get("query"):
+        evo["query"] = args.query
 
     # ── Run-local iteration counter (NOT the global KB counter) ─────────
     # Each call to generate_candidates advances one generation:

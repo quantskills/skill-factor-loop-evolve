@@ -158,6 +158,7 @@ def generate_summary(knowledge_path: str, output_path: str) -> dict:
         "best_factors": best_factors,
         "worth_keeping": worth_keeping,
         "worth_keeping_rationale": rationale,
+        "query": _load_query(Path(output_path).parent),
         "evolution_diagram": _build_evolution_diagram(
             kb, best_factors, best_history,
             output_dir=str(Path(output_path).parent),
@@ -260,6 +261,18 @@ def _load_active_config() -> dict:
         return json.loads(cfg_path.read_text(encoding="utf-8"))
     except Exception as e:
         return {"error": str(e)}
+
+
+def _load_query(output_dir: Path) -> str:
+    """Load the original user query from candidate_evolution.json if available."""
+    evo_path = output_dir / "candidate_evolution.json"
+    if evo_path.is_file():
+        try:
+            evo = json.loads(evo_path.read_text(encoding="utf-8-sig"))
+            return evo.get("query", "")
+        except Exception:
+            pass
+    return ""
 
 
 def _dedup_correlated_nodes(
@@ -639,12 +652,13 @@ def _build_evolution_diagram(
 
     # ── Save .md file for visual rendering ──────────────────────────────
     if output_dir:
-        _write_md(Path(output_dir) / "evolution_diagram.md", result, output_dir)
+        query = _load_query(Path(output_dir)) if output_dir else ""
+        _write_md(Path(output_dir) / "evolution_diagram.md", result, output_dir, query)
 
     return result
 
 
-def _write_md(path: Path, mermaid: str, output_dir: str = "") -> None:
+def _write_md(path: Path, mermaid: str, output_dir: str = "", query: str = "") -> None:
     """Write a Mermaid diagram as a Markdown file for VS Code preview.
 
     Includes a top-10 factors table ranked by Sharpe.
@@ -673,10 +687,19 @@ def _write_md(path: Path, mermaid: str, output_dir: str = "") -> None:
 {chr(10).join(rows)}
 """
 
+    query_section = ""
+    if query:
+        query_section = f"""
+## 📝 Original User Query
+
+> {query}
+
+"""
+
     md = f"""# Factor Evolution Diagram
 
 > Open this file in VS Code with Markdown preview (`Cmd+Shift+V`) to see the rendered graph.
-{top_table}
+{query_section}{top_table}
 ```mermaid
 {mermaid}
 ```

@@ -143,9 +143,9 @@ after the run. The skill root stays clean (only `config.json` and `.env`).
 | `diagnosis.json` | Classification + key metrics (S, IC, TO) + suggestions (flattened) |
 | `knowledge_base.json` | Experience memory: successful patterns, error log, field effectiveness |
 | `candidate_evolution.json` | Full genealogy tree with per-node metrics |
-| `final_summary.json` | Optimization log, top 5 factors, worth_keeping, active config, evolution diagram |
+| `final_summary.json` | Optimization log, top 5 factors, worth_keeping, original query, active config, evolution diagram |
 | `config.json` | Full config used for this run (reproducibility) |
-| `evolution_diagram.md` | Mermaid graph + top-10 filtered table (open with Cmd+Shift+V) |
+| `evolution_diagram.md` | Mermaid graph + original query + top-10 filtered table (open with Cmd+Shift+V) |
 | `trading_data/` | CSV: portfolio returns, IC series, positions |
 
 No `validated_factors.json` or `validated_factors_passed.json` or
@@ -160,6 +160,7 @@ Read `final_summary.json` first for the high-level picture:
 - **`best_factors`**: top 5 factors sorted by actual Sharpe. Each has `name`, `sharpe`,
   `ic_mean`, `turnover`, `annual_return`, `expression`, `classification`.
 - **`worth_keeping`**: `true` if best Sharpe ≥ `worth_keeping_sharpe_threshold` (default 0.3).
+- **`query`**: the original user input query that initiated this factor evolution run.
 - **`evolution_diagram`**: raw Mermaid string rendered in `evolution_diagram.md`.
 - **`active_config`**: full config snapshot for reproducibility.
 
@@ -247,7 +248,8 @@ python scripts/diagnose.py --results backtest_results_all.json --factors validat
 python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
 
 # Generate next candidates → next_candidates.json (intermediate)
-python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
+# Pass --query with the original user input to track it through the run
+python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
 
 # After last iteration — final summary → final_summary.json + evolution_diagram.md + config.json
 python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
