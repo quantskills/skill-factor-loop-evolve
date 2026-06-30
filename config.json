@@ -1,0 +1,138 @@
+{
+  "backtest": {
+    "cost_bps": 5.0,
+    "holding_days": 5,
+    "n_quantiles": 5,
+    "long_pct": 0.2,
+    "short_pct": 0.2,
+    "lookback_min_days": 252,
+    "indicator": "000300",
+    "start_date": "20240101",
+    "end_date": "20251231",
+    "exclude_st": true
+  },
+  "classification": {
+    "promising": {
+      "ic_min": 0.01,
+      "icir_min": 0.05,
+      "sharpe_min": 0.3,
+      "turnover_max": 0.85,
+      "coverage_min": 0.25
+    },
+    "weak": {
+      "sharpe_range": [-0.3, 0.3],
+      "ic_max": 0.02,
+      "icir_max": 0.3
+    },
+    "duplicate": { "correlation_threshold": 0.85 },
+    "unstable": { "ic_std_ratio": 20.0 },
+    "overfit": { "sharpe_extreme": 3.0, "ic_weak": 0.01 },
+    "invalid": { "coverage_min": 0.10 }
+  },
+  "parent_selection": {
+    "min_parents": 1,
+    "max_parents": 3,
+    "duplicate_correlation_threshold": 0.7
+  },
+  "evolution_tags": {
+    "high_sharpe": 0.5,
+    "low_sharpe_abs": 0.2,
+    "high_ic_abs": 0.02,
+    "low_ic_abs": 0.01,
+    "high_turnover": 0.85,
+    "low_turnover": 0.5,
+    "high_drawdown": -0.5
+  },
+  "transformations": {
+    "min_transforms_per_parent": 1,
+    "max_transforms_per_parent": 5,
+    "reduce_turnover_threshold": 0.8,
+    "low_turnover_threshold": 0.3,
+    "flip_sign_sharpe_threshold": -0.3
+  },
+  "stopping": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "stall_iterations": 3,
+    "diminishing_return_threshold": 0.02,
+    "worth_keeping_sharpe_threshold": 0.3
+  },
+  "validation": {
+    "max_expression_length": 500,
+    "max_nesting_depth": 5,
+    "max_function_calls": 15,
+    "min_rolling_n": 2,
+    "max_rolling_n": 252
+  },
+  "_help": {
+    "backtest": {
+      "cost_bps": "Transaction cost in basis points (one-way, each buy and sell)",
+      "holding_days": "Number of trading days between rebalance events",
+      "n_quantiles": "Number of quantile groups to split universe into",
+      "long_pct": "Fraction of universe to go long (top quantile)",
+      "short_pct": "Fraction of universe to go short (bottom quantile)",
+      "lookback_min_days": "Minimum trading days required per stock to be included",
+      "indicator": "Stock universe index code (000300 = CSI 300, 000905 = CSI 500)",
+      "start_date": "Backtest start date in YYYYMMDD format",
+      "end_date": "Backtest end date in YYYYMMDD format",
+      "exclude_st": "If true, exclude ST (special treatment) stocks from universe"
+    },
+    "classification": {
+      "_order": "First match wins: invalid → overfit → unstable → duplicate → weak → promising",
+      "promising": "Must meet ALL thresholds: |IC|≥ic_min, |ICIR|≥icir_min, Sharpe≥sharpe_min, turnover≤turnover_max, coverage≥coverage_min",
+      "promising_ic_min": "Minimum absolute IC mean to be promising",
+      "promising_icir_min": "Minimum absolute ICIR (IC / IC std) to be promising",
+      "promising_sharpe_min": "Minimum actual Sharpe (not abs) to be promising",
+      "promising_turnover_max": "Maximum turnover fraction allowed for promising",
+      "promising_coverage_min": "Minimum coverage (long_pct + short_pct) for promising",
+      "weak": "Sharpe in [lo, hi] AND |IC|<ic_max AND |ICIR|<icir_max. Also catch-all default.",
+      "weak_sharpe_range": "Sharpe range [low, high] that qualifies as weak (near zero)",
+      "weak_ic_max": "Absolute IC must be below this for weak",
+      "weak_icir_max": "Absolute ICIR must be below this for weak",
+      "duplicate": "Spearman rank correlation of IC series > correlation_threshold → duplicate",
+      "unstable": "IC standard deviation / |IC mean| > ic_std_ratio → unstable (noisy)",
+      "overfit": "|Sharpe| > sharpe_extreme while |IC| < ic_weak → overfit (returns without predictive power)",
+      "invalid": "Coverage < coverage_min OR backtest failed OR NaN/inf metrics → invalid"
+    },
+    "parent_selection": {
+      "_rule": "Sort all valid factors by actual Sharpe (highest first), skip those correlated > threshold with already-selected, take top max_parents",
+      "min_parents": "Minimum number of parent factors to select (if fewer valid factors exist, use all)",
+      "max_parents": "Maximum number of parent factors selected per iteration",
+      "duplicate_correlation_threshold": "Skip factor if Spearman correlation > this with any already-selected parent"
+    },
+    "evolution_tags": {
+      "_desc": "Thresholds for the 🟢/🔴 descriptive tags shown on each evolution diagram node",
+      "high_sharpe": "Actual Sharpe ≥ this → green high Sharpe tag",
+      "low_sharpe_abs": "|Sharpe| < this → red low Sharpe tag (near zero, weak signal)",
+      "high_ic_abs": "|IC| ≥ this → green high IC tag",
+      "low_ic_abs": "|IC| < this → red low IC tag",
+      "high_turnover": "Turnover > this → red high turnover tag",
+      "low_turnover": "Turnover < this → green low turnover tag",
+      "high_drawdown": "Max drawdown < this (more negative) → red high drawdown tag"
+    },
+    "transformations": {
+      "_desc": "Triggers and limits for each controlled transformation applied to parent factors",
+      "min_transforms_per_parent": "Minimum number of transformations to try per parent factor",
+      "max_transforms_per_parent": "Maximum number of transformations applied to each parent factor",
+      "reduce_turnover_threshold": "Apply reduce-turnover (ts_mean smoothing) when turnover > this",
+      "low_turnover_threshold": "Apply adjust-lookback when turnover < this (too stable, may need more signal)",
+      "flip_sign_sharpe_threshold": "Apply flip-sign (negate expression) when Sharpe < this (negative)"
+    },
+    "stopping": {
+      "_desc": "Optimization loop stopping criteria. Loop stops when any condition is met.",
+      "min_iterations": "Minimum iterations to run before early stopping is allowed",
+      "max_iterations": "Absolute maximum iterations allowed (hard stop)",
+      "stall_iterations": "Stop if best Sharpe unchanged for this many consecutive iterations",
+      "diminishing_return_threshold": "Stop if Sharpe improvement < this for 2 consecutive iterations",
+      "worth_keeping_sharpe_threshold": "Final report marks worth_keeping=true if best Sharpe ≥ this"
+    },
+    "validation": {
+      "_desc": "Factor expression validation limits. Warnings are issued but factors are NOT automatically rejected.",
+      "max_expression_length": "Maximum characters in a factor expression string",
+      "max_nesting_depth": "Maximum nested function call depth allowed",
+      "max_function_calls": "Maximum number of distinct function calls in one expression",
+      "min_rolling_n": "Minimum allowed rolling window parameter value",
+      "max_rolling_n": "Maximum allowed rolling window parameter value (~1 trading year)"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.env
+.pandadata/
+*.parquet
+*.csv
+*.feather
+*.h5
+*.hdf5
+output/

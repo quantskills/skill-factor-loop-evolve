@@ -1,0 +1,5 @@
+numpy>=1.21.0
+pandas>=1.5.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+panda_data>=0.1.0

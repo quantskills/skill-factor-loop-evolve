@@ -1,0 +1,34 @@
+---
+description: Use the Factor Loop Evolve skill to run a closed-loop factor evolution pipeline: validate → backtest → diagnose → learn → generate variants → iterate N rounds.
+alwaysApply: false
+---
+
+# Factor Loop Evolve Skill
+
+When the user asks to optimize factors, discover alphas iteratively, run a
+factor evolution loop, or improve a factor library:
+
+1. Read `SKILL.md`.
+2. Read `references/factor-contract.md`.
+3. Read `references/optimization-protocol.md`.
+4. Read `config.json` for current hyperparameters.
+5. Set `FACTOR_OPTIMIZE_RUN_DIR` and init knowledge base:
+   `python scripts/knowledge_base.py --init --output $FACTOR_OPTIMIZE_RUN_DIR/knowledge_base.json`
+6. Place initial candidates as `candidates.json` in the output directory.
+7. For each iteration (1..N):
+   - Validate:
+     `python scripts/validator.py --factors candidates.json`
+   - Backtest:
+     `python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json`
+   - Diagnose:
+     `python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json`
+   - Learn:
+     `python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json`
+   - Check stopping criteria (stall, max iterations).
+   - Generate next batch:
+     `python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json`
+     Then validate next_candidates.json for the next loop.
+8. After all iterations:
+   `python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json`
+9. Read `final_summary.json` and report: optimization log, top 5 factors,
+   worth keeping, key patterns, evolution diagram.
