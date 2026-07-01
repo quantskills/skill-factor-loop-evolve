@@ -1,7 +1,7 @@
 # Factor Expression Field & Function Contract
 
 This document defines the exact contract for alpha factor expressions generated
-by `skill-factor-optimize`. All generated or optimized expressions **must** use
+by `skill-factor-loop-evolve`. All generated or optimized expressions **must** use
 only the fields and functions listed below.
 
 ---

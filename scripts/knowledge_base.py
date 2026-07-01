@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Experience memory (knowledge base) manager for skill-factor-optimize.
+"""Experience memory (knowledge base) manager for skill-factor-loop-evolve.
 
 Manages the local knowledge base that persists lessons across iterations:
 which fields worked, which templates failed, which errors recurred, which
@@ -29,7 +29,6 @@ from contracts import (  # noqa: E402
     DEFAULT_KNOWLEDGE_BASE,
     DEFAULT_TEMPLATES,
     ALLOWED_FIELDS,
-    output_path as _resolve_output,
 )
 
 
@@ -221,6 +220,200 @@ def summarize_knowledge(kb: dict) -> dict:
             key=lambda x: x.get("times_failed", 0), reverse=True
         )[:5],
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Active Knowledge Base — Insights for Parent Selection & Transform Guidance
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_field_diversity(kb: dict) -> dict:
+    """Compute field usage diversity metrics.
+
+    Returns dict with:
+    - pct: per-field usage percentage
+    - overused: fields above 25% usage
+    - underused: fields below 8% usage
+    - gini: approximate concentration (0=uniform, 1=one field dominates)
+    """
+    field_eff = kb.get("field_effectiveness", {})
+    total = sum(field_eff.values()) or 1
+    pcts = {k: v / total for k, v in field_eff.items()}
+
+    overused = [k for k, v in pcts.items() if v > 0.25]
+    underused = [k for k, v in pcts.items() if v < 0.08 and total > 3]
+
+    # Simple Gini-like concentration: max_pct - uniform_pct
+    uniform = 1.0 / max(len(pcts), 1)
+    max_pct = max(pcts.values()) if pcts else 0
+    concentration = max(0.0, min(1.0, (max_pct - uniform) / (1.0 - uniform))) if uniform < 1.0 else 0.0
+
+    return {
+        "pct": {k: round(v, 3) for k, v in pcts.items()},
+        "overused": overused,
+        "underused": underused,
+        "concentration": round(concentration, 3),
+        "total_observations": total,
+    }
+
+
+def get_transform_effectiveness(kb: dict) -> dict:
+    """Analyze which transformation types have been effective historically.
+
+    Scans successful_patterns for pattern names that indicate specific
+    transform types (rule-based transforms use ``_vN_transformname`` suffix;
+    LLM transforms include the transform name in their name field).
+    Returns per-transform success count and average Sharpe.
+    """
+    from contracts import VALID_TRANSFORMATIONS
+
+    effectiveness = {t: {"success": 0, "avg_sharpe": 0.0} for t in VALID_TRANSFORMATIONS}
+
+    for sp in kb.get("successful_patterns", []):
+        pattern = sp.get("pattern", "")
+        sharpe = sp.get("avg_sharpe", 0)
+        # Rule-based transforms use suffix: name_vN_transformname
+        # LLM transforms use: name_llm_transform-name
+        for trans in VALID_TRANSFORMATIONS:
+            if trans in pattern:
+                prev = effectiveness[trans]
+                prev["success"] += 1
+                prev["avg_sharpe"] = round(
+                    (prev["avg_sharpe"] * (prev["success"] - 1) + sharpe) / prev["success"], 4
+                )
+
+    result = {}
+    for trans, counts in effectiveness.items():
+        if counts["success"] > 0:
+            result[trans] = {
+                "success_count": counts["success"],
+                "avg_sharpe": counts["avg_sharpe"],
+            }
+
+    return result
+
+
+def get_convergence_warning(kb: dict) -> dict:
+    """Detect if the system is converging to a local optimum.
+
+    Checks:
+    - Sharpe plateau (unchanged for ≥2 iterations)
+    - Single-parent dominance (best factor unchanged for ≥2 iterations)
+    - Field concentration (one field >50% usage)
+    """
+    best_hist = kb.get("best_factor_history", [])
+    field_div = get_field_diversity(kb)
+
+    warning = False
+    reasons = []
+
+    # Sharpe plateau check
+    if len(best_hist) >= 3:
+        recent = [h.get("sharpe", 0) for h in best_hist[-3:]]
+        if max(recent) - min(recent) < 0.005:
+            warning = True
+            reasons.append("Sharpe plateau: no improvement for ≥3 iterations")
+
+    # Single-parent dominance — check both rule-based (_v) and LLM (_llm_) prefixes
+    if len(best_hist) >= 2:
+        recent_factors = [h.get("factor", "") for h in best_hist[-2:]]
+        if len(recent_factors) >= 2:
+            base_names = []
+            for f in recent_factors:
+                if "_v" in f:
+                    base_names.append(f.split("_v")[0])
+                elif "_llm_" in f:
+                    base_names.append(f.split("_llm_")[0])
+                else:
+                    base_names.append(f)
+            if len(set(base_names)) == 1 and len(base_names) >= 2:
+                warning = True
+                reasons.append(f"Single-parent dominance: all best factors derive from '{base_names[0]}'")
+
+    # Field concentration
+    if field_div["concentration"] > 0.6:
+        warning = True
+        reasons.append(f"Field concentration {field_div['concentration']:.2f}: {field_div['overused']} dominate")
+
+    return {
+        "warning": warning,
+        "reasons": reasons,
+        "recommendation": "Generate fresh seed factors from underexplored families" if warning else "Continue current trajectory",
+    }
+
+
+def get_parent_diversity_boost(
+    parents: list[dict],
+    kb: dict,
+    diversity_weight: float = 0.05,
+) -> list[dict]:
+    """Boost parent scores using active knowledge base insights.
+
+    Rewards factors that:
+    - Use underexplored fields (+diversity bonus)
+    - Have successful pattern ancestry (+success bonus)
+    - Are NOT similar to repeatedly failed patterns (-penalty)
+
+    Returns parents with ``_effective_sharpe`` and ``_boost_reasons`` fields.
+    """
+    from contracts import ALLOWED_FIELDS
+
+    field_eff = kb.get("field_effectiveness", {})
+    total_field_uses = sum(field_eff.values()) or 1
+
+    failed_patterns = {
+        fp.get("pattern", ""): fp.get("times_failed", 0)
+        for fp in kb.get("failed_patterns", [])
+        if fp.get("times_failed", 0) >= 2
+    }
+    successful_patterns = {
+        sp.get("pattern", ""): sp.get("avg_sharpe", 0)
+        for sp in kb.get("successful_patterns", [])
+    }
+
+    for parent in parents:
+        expr = parent.get("expression", "")
+        base_sharpe = parent.get("sharpe") or 0
+        boost = 0.0
+        reasons = []
+
+        # 1. Field diversity bonus
+        for field in ALLOWED_FIELDS:
+            if field in expr:
+                field_usage_ratio = field_eff.get(field, 0) / max(total_field_uses, 1)
+                if field_usage_ratio < 0.08 and total_field_uses > 3:
+                    boost += diversity_weight
+                    reasons.append(f"+diversity:{field}")
+
+        # 2. Success pattern ancestry bonus
+        for pat_expr in successful_patterns:
+            if _token_overlap(expr, pat_expr) > 0.6:
+                boost += diversity_weight * 0.6
+                reasons.append("+ancestry")
+                break
+
+        # 3. Failed pattern similarity penalty
+        for fp_expr, fail_count in failed_patterns.items():
+            if _token_overlap(expr, fp_expr) > 0.7:
+                boost -= diversity_weight * 1.5 * fail_count
+                reasons.append(f"-failed_similar({fail_count}x)")
+                break
+
+        parent["_effective_sharpe"] = round(base_sharpe + boost, 4)
+        parent["_boost"] = round(boost, 4)
+        parent["_boost_reasons"] = reasons
+
+    return parents
+
+
+def _token_overlap(expr1: str, expr2: str) -> float:
+    """Compute token-level Jaccard overlap between two expressions."""
+    def _tokens(e: str) -> set[str]:
+        return set(e.replace("(", " ").replace(")", " ").replace(",", " ").replace("/", " ").replace("*", " ").replace("+", " ").replace("-", " ").split())
+    t1 = _tokens(expr1)
+    t2 = _tokens(expr2)
+    if not t1 or not t2:
+        return 0.0
+    return len(t1 & t2) / len(t1 | t2)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Factor expression validator for skill-factor-optimize.
+"""Factor expression validator for skill-factor-loop-evolve.
 
 Validates alpha factor expressions against the field/function contract,
 checks for look-ahead bias, numerical stability, and complexity limits.
@@ -9,7 +9,7 @@ Usage::
 
     python scripts/validator.py --factors candidates.json
     python scripts/validator.py --factors candidates.json --correction-context
-    python scripts/validator.py --factors candidates.json --output validated.json
+    python scripts/validator.py --factors candidates.json --output validated_factors_passed.json
 """
 
 from __future__ import annotations
@@ -636,9 +636,7 @@ def main() -> None:
          }
         for r in result["results"] if r["ok"]
     ]
-    passed_path = str(_resolve_output("validated_factors_passed.json"))
-    if args.output:
-        passed_path = args.output.replace(".json", "_passed.json")
+    passed_path = args.output or str(_resolve_output("validated_factors_passed.json"))
     Path(passed_path).write_text(
         json.dumps(passed_factors, ensure_ascii=False, indent=2), encoding="utf-8"
     )

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Factor diagnosis and classification for skill-factor-optimize.
+"""Factor diagnosis and classification for skill-factor-loop-evolve.
 
 Analyzes backtest results to compute IC, ICIR, Sharpe, return, drawdown,
 turnover, coverage, stability, long/short behavior, and correlation.
@@ -8,7 +8,7 @@ or invalid.
 
 Usage::
 
-    python scripts/diagnose.py --results backtest_results.json --factors validated.json --output diagnosis.json
+    python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
 """
 
 from __future__ import annotations
@@ -86,7 +86,6 @@ def compute_correlation_between_factors(
 
 def classify_factor(
     factor_result: dict,
-    all_results: list[dict],
     correlations: dict[str, float],
 ) -> str:
     """Classify a single factor based on its backtest metrics.
@@ -176,7 +175,7 @@ def diagnose(
 
     for fr in factor_results:
         name = fr.get("name", "unnamed")
-        classification = classify_factor(fr, factor_results, correlations)
+        classification = classify_factor(fr, correlations)
 
         # Build per-factor diagnostic
         factor_def = next((f for f in factors if f.get("name") == name), {})

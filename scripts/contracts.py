@@ -126,18 +126,18 @@ VALID_TRANSFORMATIONS: frozenset[str] = frozenset({
 """The 12 controlled transformation types."""
 
 TRANSFORMATION_RATIONALE_MAP: dict[str, str] = {
-    "adjust-lookback": "IC too noisy or too smooth",
-    "adjust-smoothing": "Turnover too high or too low",
-    "adjust-clipping": "Extreme outlier spikes detected",
-    "adjust-normalization": "Distribution skew issues",
-    "combine-factors": "Both promising, low correlation (< 0.3)",
-    "simplify": "Over-complex expression, high turnover",
-    "reduce-turnover": "Turnover > 0.8",
-    "remove-component": "Weak or noisy component detected",
-    "long-only": "Short side underperforming",
-    "short-only": "Long side underperforming",
-    "asymmetric": "Asymmetric return profile detected",
-    "flip-sign": "Negative Sharpe — invert sign to recover positive Sharpe",
+    "adjust-lookback": "IC signal is too noisy or too smooth — changing the lookback window can improve stability",
+    "adjust-smoothing": "Turnover is too high or too low — adjusting smoothing helps balance signal decay vs. trading cost",
+    "adjust-clipping": "Extreme outliers are distorting the signal — clipping caps their influence for more robust rankings",
+    "adjust-normalization": "Factor distribution is skewed — switching normalization method improves cross-sectional comparability",
+    "combine-factors": "Both factors are promising with low correlation — combining them diversifies the alpha source",
+    "simplify": "Expression is over-complex with high turnover — removing nesting reduces overfit risk without losing signal",
+    "reduce-turnover": "Turnover exceeds 0.8 — smoothing the signal reduces excessive trading and transaction costs",
+    "remove-component": "A sub-component is weak or noisy — removing it purifies the remaining signal",
+    "long-only": "The short leg is underperforming — keeping only long positions eliminates dead-weight shorts",
+    "short-only": "The long leg is underperforming — keeping only short positions eliminates dead-weight longs",
+    "asymmetric": "Long and short returns are asymmetric — weighting them differently captures the stronger side more heavily",
+    "flip-sign": "Sharpe is negative — inverting the expression sign recovers a positive Sharpe from a directionally-wrong factor",
 }
 
 
@@ -282,9 +282,23 @@ MIN_PARENTS: int = _config.get("parent_selection", {}).get("min_parents", 1)
 MAX_PARENTS: int = _config.get("parent_selection", {}).get("max_parents", 3)
 DUPLICATE_CORRELATION_THRESHOLD: float = _config.get("parent_selection", {}).get("duplicate_correlation_threshold", 0.7)
 
+# Evolution diagram tags
+TAG_HIGH_SHARPE: float = _config.get("evolution_tags", {}).get("high_sharpe", 0.5)
+TAG_LOW_SHARPE_ABS: float = _config.get("evolution_tags", {}).get("low_sharpe_abs", 0.2)
+TAG_HIGH_IC_ABS: float = _config.get("evolution_tags", {}).get("high_ic_abs", 0.02)
+TAG_LOW_IC_ABS: float = _config.get("evolution_tags", {}).get("low_ic_abs", 0.01)
+TAG_HIGH_TURNOVER: float = _config.get("evolution_tags", {}).get("high_turnover", 0.85)
+TAG_LOW_TURNOVER: float = _config.get("evolution_tags", {}).get("low_turnover", 0.5)
+TAG_HIGH_DRAWDOWN: float = _config.get("evolution_tags", {}).get("high_drawdown", -0.5)
+
 # Transformations
 MIN_TRANSFORMS: int = _config.get("transformations", {}).get("min_transforms_per_parent", 1)
 MAX_TRANSFORMS: int = _config.get("transformations", {}).get("max_transforms_per_parent", 5)
+REDUCE_TURNOVER_THRESHOLD: float = _config.get("transformations", {}).get("reduce_turnover_threshold", 0.8)
+LOW_TURNOVER_THRESHOLD: float = _config.get("transformations", {}).get("low_turnover_threshold", 0.3)
+FLIP_SIGN_SHARPE_THRESHOLD: float = _config.get("transformations", {}).get("flip_sign_sharpe_threshold", -0.3)
+USE_LLM_TRANSFORMS: bool = _config.get("transformations", {}).get("use_llm_transforms", True)
+"""If True (default), use LLM-driven semantic transform suggestions. If False, use original hard-coded transforms."""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -389,47 +403,3 @@ def output_path(
         out = resolve_output_dir(run_id)
     out.mkdir(parents=True, exist_ok=True)
     return out / filename
-
-
-def build_generation_prompt(
-    n_factors: int,
-    context: str = "",
-    templates: str = "",
-) -> str:
-    """Build a generation prompt for the LLM to create initial factors.
-
-    Args:
-        n_factors: Number of factors to generate.
-        context: User's research context/theme.
-        templates: Known template patterns to consider.
-
-    Returns:
-        A prompt string.
-    """
-    lines = [
-        f"Generate exactly {n_factors} novel alpha factor expressions for stock selection.",
-        "",
-        "FOLLOW THE CONTRACT IN references/factor-contract.md EXACTLY:",
-        "- ONLY these 6 fields: open, high, low, close, volume, amount",
-        "- ONLY the 27 functions listed in the contract",
-        "- Do NOT use vwap, adjfactor, or any other field",
-        "",
-        ANTI_BIAS_RULES,
-        "",
-        STABILITY_RULES,
-    ]
-
-    if context:
-        lines.append(f"\nRESEARCH CONTEXT:\n{context}")
-
-    if templates:
-        lines.append(f"\nKNOWN TEMPLATES TO CONSIDER:\n{templates}")
-
-    lines.extend([
-        "",
-        "Output a JSON array of objects with keys:",
-        "  name (snake_case), expression, description, rationale, generation (set to 'initial')",
-        "Return ONLY the JSON array, no other text.",
-    ])
-
-    return "\n".join(lines)

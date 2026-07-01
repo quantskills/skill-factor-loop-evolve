@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Fixed local backtest engine for skill-factor-optimize.
+"""Real-data backtest engine for skill-factor-loop-evolve.
 
-Runs a consistent cross-sectional long-only backtest on validated factors.
+Runs a consistent cross-sectional long-short backtest on validated factors.
 Uses panda_data API to retrieve real A-share market OHLCV data. Credentials
 are read from a ``.env`` file in the skill root directory.
 
-Data window: recent 2-year period (configurable via --start-date / --end-date).
+Data window: configurable via config.json (default: CSI 300, 2024-2025).
 Universe: CSI 300 (000300) by default, configurable via --indicator.
 
 Usage::
 
-    python scripts/backtest.py --factors validated.json --output results.json
-    python scripts/backtest.py --factors validated.json --indicator 000905 --output results.json
-    python scripts/backtest.py --factors validated.json --start-date 20230601 --end-date 20250601
+    python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
+    python scripts/backtest.py --factors validated_factors_passed.json --indicator 000905 --output backtest_results_all.json
     python scripts/backtest.py --factors validated.json --cost-bps 3 --holding-days 10
 """
 

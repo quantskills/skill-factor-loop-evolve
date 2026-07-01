@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Optimization loop coordinator for skill-factor-optimize.
+"""Optimization loop coordinator for skill-factor-loop-evolve.
 
 Generates the final summary after all iterations: optimization log,
 final alpha library, best factors, rejected factors, useful patterns,
@@ -28,6 +28,13 @@ from contracts import (  # noqa: E402
     MIN_ITERATIONS,
     MAX_ITERATIONS,
     WORTH_KEEPING_SHARPE_THRESHOLD,
+    TAG_HIGH_SHARPE,
+    TAG_LOW_SHARPE_ABS,
+    TAG_HIGH_IC_ABS,
+    TAG_LOW_IC_ABS,
+    TAG_HIGH_TURNOVER,
+    TAG_LOW_TURNOVER,
+    TAG_HIGH_DRAWDOWN,
     output_path as _resolve_output,
 )
 
@@ -152,10 +159,26 @@ def generate_summary(knowledge_path: str, output_path: str) -> dict:
             "sharpe": p.get("avg_sharpe", 0),
         })
 
+    # ── Pareto frontier ──────────────────────────────────────────────
+    output_dir = Path(output_path).parent
+    all_factors = _collect_all_factors(output_dir)
+    pareto_factors = _compute_pareto_frontier(all_factors)
+    pareto_summary = []
+    for pf in pareto_factors[:10]:
+        pareto_summary.append({
+            "factor": pf.get("expression", pf.get("name", "")),
+            "sharpe": pf.get("sharpe", 0),
+            "turnover": pf.get("turnover", 0),
+            "max_drawdown": pf.get("max_drawdown", 0),
+            "annual_return": pf.get("annual_return", 0),
+            "ic_mean": pf.get("ic_mean", 0),
+        })
+
     summary = {
         "iterations": iterations,
         "optimization_log": optimization_log,
         "best_factors": best_factors,
+        "pareto_frontier": pareto_summary,
         "worth_keeping": worth_keeping,
         "worth_keeping_rationale": rationale,
         "query": _load_query(Path(output_path).parent),
@@ -231,6 +254,33 @@ def _compute_filtered_top_factors(
     return kept[:n_top]
 
 
+def _collect_all_factors(output_dir: Path) -> list[dict]:
+    """Collect all factor results across all iterations for Pareto analysis."""
+    bt_all_path = output_dir / "backtest_results_all.json"
+    if not bt_all_path.is_file():
+        return []
+
+    all_bt = json.loads(bt_all_path.read_text(encoding="utf-8-sig"))
+    all_factors: list[dict] = []
+
+    iterations = all_bt.get("iterations", [all_bt])
+    for it in iterations:
+        for fr in it.get("factor_results", it.get("results", [])):
+            if "error" in fr or fr.get("sharpe") is None:
+                continue
+            all_factors.append(fr)
+
+    # Deduplicate by expression (keep first occurrence)
+    seen = set()
+    unique = []
+    for f in all_factors:
+        expr = f.get("expression", "").strip()
+        if expr not in seen:
+            seen.add(expr)
+            unique.append(f)
+    return unique
+
+
 def _cleanup_intermediate_files(output_dir: Path) -> None:
     """Remove intermediate files that should not appear in final output.
 
@@ -244,6 +294,8 @@ def _cleanup_intermediate_files(output_dir: Path) -> None:
         "candidates.json",
         "validated_factors_passed.json",
         "next_candidates.json",
+        "transform_prompt.md",
+        "llm_response.json",
     ]
     for fname in intermediates:
         fpath = output_dir / fname
@@ -275,160 +327,147 @@ def _load_query(output_dir: Path) -> str:
     return ""
 
 
-def _dedup_correlated_nodes(
-    nodes: list[dict],
-    edges: list[dict],
-    bt_by_name: dict[str, dict],
-    output_dir: str = "",
-    corr_threshold: float = 0.85,
-) -> tuple[list[dict], list[dict]]:
-    """Remove highly correlated nodes, keeping only the highest Sharpe per cluster.
+def _compute_pareto_frontier(
+    factors: list[dict],
+    objectives: list[tuple[str, str]] | None = None,
+) -> list[dict]:
+    """Compute the Pareto frontier across multiple objectives.
 
-    Reads IC series from trading_data/ic_series.csv for correlation.
-    Redirects edges from removed nodes to the kept node.
+    Default objectives: maximize Sharpe, minimize turnover, minimize max_drawdown.
+    A factor dominates another if it is better in ALL objectives.
+
+    Args:
+        factors: List of factor result dicts with sharpe, turnover, max_drawdown, etc.
+        objectives: List of (metric_key, direction) tuples.
+                    direction is 'maximize' or 'minimize'.
+
+    Returns:
+        List of non-dominated (Pareto-optimal) factors.
     """
-    import numpy as np
+    if objectives is None:
+        objectives = [
+            ("sharpe", "maximize"),
+            ("turnover", "minimize"),
+            ("max_drawdown", "maximize"),  # less negative = better
+        ]
 
-    n = len(nodes)
-    if n <= 1:
-        return nodes, edges
+    if not factors:
+        return []
 
-    # ── Load IC series from CSV ────────────────────────────────────────
-    ic_series_by_name: dict[str, list[float]] = {}
-    if output_dir:
-        csv_path = Path(output_dir) / "trading_data" / "ic_series.csv"
-        if csv_path.is_file():
-            try:
-                import pandas as pd
-                df = pd.read_csv(csv_path)
-                for name, grp in df.groupby("factor"):
-                    ic_list = grp["ic"].dropna().tolist()
-                    if len(ic_list) >= 5:
-                        ic_series_by_name[name] = ic_list
-            except Exception:
-                pass
+    def dominates(a: dict, b: dict) -> bool:
+        """Returns True if factor a dominates factor b."""
+        at_least_one_better = False
+        for key, direction in objectives:
+            va = a.get(key, 0) or 0
+            vb = b.get(key, 0) or 0
 
-    # Build correlation matrix
-    removed: set[str] = set()
-    kept_to_removed: dict[str, list[str]] = {}
+            if direction == "maximize":
+                if va < vb:
+                    return False
+                if va > vb:
+                    at_least_one_better = True
+            else:  # minimize
+                if va > vb:
+                    return False
+                if va < vb:
+                    at_least_one_better = True
+        return at_least_one_better
 
-    for i in range(n):
-        if nodes[i]["id"] in removed:
-            continue
-        for j in range(i + 1, n):
-            if nodes[j]["id"] in removed:
+    pareto = []
+    for i, fi in enumerate(factors):
+        dominated = False
+        for j, fj in enumerate(factors):
+            if i == j:
                 continue
-            ni, nj = nodes[i], nodes[j]
-            id_i, id_j = ni["id"], nj["id"]
+            if dominates(fj, fi):
+                dominated = True
+                break
+        if not dominated:
+            pareto.append(fi)
 
-            ic_i = ic_series_by_name.get(id_i, [])
-            ic_j = ic_series_by_name.get(id_j, [])
+    return pareto
 
-            is_correlated = False
-            if ic_i and ic_j and len(ic_i) >= 5 and len(ic_j) >= 5:
-                try:
-                    min_len = min(len(ic_i), len(ic_j))
-                    corr = np.corrcoef(ic_i[:min_len], ic_j[:min_len])[0, 1]
-                    if not np.isnan(corr) and abs(corr) > corr_threshold:
-                        is_correlated = True
-                except Exception:
-                    pass
 
-            # Fallback: expression similarity for nodes without IC data
-            if not is_correlated and (not ic_i or not ic_j):
-                e1 = ni.get("expression", ni.get("label", ""))
-                e2 = nj.get("expression", nj.get("label", ""))
-                if e1 and e2:
-                    # Normalize: strip whitespace, extract core formula parts
-                    def _core(expr: str) -> str:
-                        """Extract core formula: the first function chain before any clip/rank wrap."""
-                        s = expr.strip().replace(" ", "")
-                        # Remove outer clip/rank/decay_linear wrappers for comparison
-                        for fn in ["clip(", "rank(", "decay_linear(", "zscore("]:
-                            if s.startswith(fn):
-                                depth = 0
-                                end = len(s)
-                                for k, ch in enumerate(s):
-                                    if ch == "(": depth += 1
-                                    elif ch == ")":
-                                        depth -= 1
-                                        if depth == 0:
-                                            end = k + 1
-                                            break
-                                inner = s[len(fn):end-1]
-                                # Check if there's a comma (multi-arg), take first arg
-                                arg_depth = 0
-                                for m, ch in enumerate(inner):
-                                    if ch == "(": arg_depth += 1
-                                    elif ch == ")": arg_depth -= 1
-                                    elif ch == "," and arg_depth == 0:
-                                        inner = inner[:m]
-                                        break
-                                return _core(inner)
-                        return s
-                    c1 = _core(e1)
-                    c2 = _core(e2)
-                    # Also compare full normalized expressions
-                    n1 = e1.strip().replace(" ", "")
-                    n2 = e2.strip().replace(" ", "")
-                    # Core match OR high token overlap
-                    if c1 == c2:
-                        is_correlated = True
-                    elif len(n1) > 10 and len(n2) > 10:
-                        tokens1 = set(n1.replace("(", " ").replace(")", " ").replace(",", " ").replace("/", " ").split())
-                        tokens2 = set(n2.replace("(", " ").replace(")", " ").replace(",", " ").replace("/", " ").split())
-                        if tokens1 and tokens2:
-                            shared = tokens1 & tokens2
-                            union = tokens1 | tokens2
-                            if len(shared) / len(union) > 0.80:
-                                is_correlated = True
+def _build_backtest_config_section(output_dir: Path) -> str:
+    """Build a markdown section describing the backtest configuration used.
 
-            if is_correlated:
-                si = ni.get("sharpe", 0) or 0
-                sj = nj.get("sharpe", 0) or 0
-                if si >= sj:
-                    removed.add(id_j)
-                    kept_to_removed.setdefault(id_i, []).append(id_j)
-                else:
-                    removed.add(id_i)
-                    kept_to_removed.setdefault(id_j, []).append(id_i)
-                    break
+    Reads from config.json in the output directory (copied during summary).
+    Falls back to skill-root config.json if output copy is missing.
+    """
+    cfg_path = output_dir / "config.json"
+    if not cfg_path.is_file():
+        cfg_path = Path(__file__).resolve().parent.parent / "config.json"
+    if not cfg_path.is_file():
+        return ""
 
-    if not removed:
-        return nodes, edges
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
 
-    # Filter nodes
-    kept_nodes = [n for n in nodes if n["id"] not in removed]
+    bt = cfg.get("backtest", {})
 
-    # Remap edges: redirect edges to/from removed nodes to their kept node
-    removed_to_keeper: dict[str, str] = {}
-    for keeper, rem_list in kept_to_removed.items():
-        for r in rem_list:
-            removed_to_keeper[r] = keeper
+    indicator = bt.get("indicator", "000300")
+    indicator_label = {"000300": "CSI 300", "000905": "CSI 500", "000016": "SZ 50", "399006": "GEM"}.get(indicator, indicator)
 
-    new_edges = []
-    seen_edge_keys = set()
-    for e in edges:
-        frm = e["from"]
-        to = e["to"]
+    start = bt.get("start_date", "N/A")
+    end = bt.get("end_date", "N/A")
+    holding = bt.get("holding_days", 5)
+    cost = bt.get("cost_bps", 5.0)
+    n_quantiles = bt.get("n_quantiles", 5)
+    long_pct = bt.get("long_pct", 0.2)
+    short_pct = bt.get("short_pct", 0.2)
 
-        # Redirect if either endpoint was removed
-        if frm in removed_to_keeper:
-            frm = removed_to_keeper[frm]
-        if to in removed_to_keeper:
-            to = removed_to_keeper[to]
+    # Format dates nicely
+    def _fmt_date(d: str) -> str:
+        if len(d) == 8:
+            return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+        return d
 
-        # Skip self-loops
-        if frm == to:
-            continue
+    return f"""
+## ⚙️ Backtest Configuration
 
-        # Deduplicate edges
-        key = (frm, to, e.get("transformation", ""))
-        if key not in seen_edge_keys:
-            seen_edge_keys.add(key)
-            new_edges.append({**e, "from": frm, "to": to})
+| Parameter | Value |
+|-----------|-------|
+| **Universe** | {indicator_label} (`{indicator}`) |
+| **Period** | {_fmt_date(start)} → {_fmt_date(end)} |
+| **Rebalance** | Every {holding} trading day{'s' if holding != 1 else ''} |
+| **Positions** | Long top {long_pct*100:.0f}%, short bottom {short_pct*100:.0f}% ({n_quantiles} quantiles) |
+| **Cost** | {cost} bps one-way |
 
-    return kept_nodes, new_edges
+"""
+
+
+def _build_pareto_table(pareto_factors: list[dict]) -> str:
+    """Build a markdown table for the Pareto frontier."""
+    if not pareto_factors:
+        return ""
+
+    # Sort by Sharpe descending for display
+    sorted_pareto = sorted(pareto_factors, key=lambda x: x.get("sharpe", 0) or 0, reverse=True)
+
+    rows = []
+    for i, f in enumerate(sorted_pareto[:10]):
+        sharpe = f.get("sharpe", 0) or 0
+        turnover = f.get("turnover", 0) or 0
+        max_dd = f.get("max_drawdown", 0) or 0
+        annual_ret = f.get("annual_return", 0) or 0
+        ic_mean = f.get("ic_mean", 0) or 0
+        expr = (f.get("expression", "") or "")[:70]
+        rows.append(
+            f"| {i+1} | {sharpe:.4f} | {annual_ret:.4f} | {max_dd:.4f} | "
+            f"{turnover:.2f} | {ic_mean:.4f} | `{expr}` |"
+        )
+
+    return f"""
+## 📊 Pareto Frontier (Sharpe vs. Turnover vs. Drawdown)
+
+*Non-dominated factors — each is optimal in at least one trade-off dimension.*
+
+| # | Sharpe | Ann.Ret | MaxDD | Turnover | IC Mean | Expression |
+|---|--------|---------|-------|----------|---------|------------|
+{chr(10).join(rows)}
+"""
 
 
 def _build_evolution_diagram(
@@ -541,25 +580,25 @@ def _build_evolution_diagram(
             ar = annual_ret or 0
 
             # Sharpe — actual value, lower = worse
-            if sharpe >= 0.5:
+            if sharpe >= TAG_HIGH_SHARPE:
                 tags.append("🟢 high Sharpe")
-            elif sharpe < 0.2:
+            elif abs_s < TAG_LOW_SHARPE_ABS:
                 tags.append("🔴 low Sharpe")
 
             # IC — uses abs
-            if abs_ic >= 0.02:
+            if abs_ic >= TAG_HIGH_IC_ABS:
                 tags.append("🟢 high IC")
-            elif abs_ic < 0.01:
+            elif abs_ic < TAG_LOW_IC_ABS:
                 tags.append("🔴 low IC")
 
             # Turnover
-            if to > 0.85:
+            if to > TAG_HIGH_TURNOVER:
                 tags.append("🔴 high turnover")
-            elif to < 0.5:
+            elif to < TAG_LOW_TURNOVER:
                 tags.append("🟢 low turnover")
 
             # Drawdown
-            if dd < -0.5:
+            if dd < TAG_HIGH_DRAWDOWN:
                 tags.append("🔴 high drawdown")
 
             # Positive return
@@ -578,7 +617,7 @@ def _build_evolution_diagram(
             from_id = node_ids.get(e["from"])
             to_id = node_ids.get(e["to"])
             if from_id and to_id:
-                trans = e.get("transformation", "")[:20]
+                trans = e.get("transformation", "")
                 lines.append(f'    {from_id} -->|"{trans}"| {to_id}')
 
         # If no edges, connect initial factors to their generation
@@ -596,13 +635,6 @@ def _build_evolution_diagram(
     else:
         # ── Fallback: build from KB ─────────────────────────────────────
         factor_info: dict[str, dict] = {}
-        # Build from best_factor_history with full factor names
-        # Look up full expressions from successful_patterns by exact match
-        pattern_by_expr = {}
-        for sp in kb.get("successful_patterns", []):
-            pat = sp.get("pattern", "")
-            if pat:
-                pattern_by_expr[pat] = sp
 
         for h in best_history:
             name = h.get("factor", "")
@@ -645,7 +677,7 @@ def _build_evolution_diagram(
                     trans_match = re.search(r'_v\d+_(.+)$', name)
                     trans = trans_match.group(1) if trans_match else "variant"
                     lines.append(
-                        f'    {node_ids[potential_parent]} -->|"{trans[:20]}"| {node_ids[name]}'
+                        f'    {node_ids[potential_parent]} -->|"{trans}"| {node_ids[name]}'
                     )
 
     result = "\n".join(lines)
@@ -658,11 +690,104 @@ def _build_evolution_diagram(
     return result
 
 
+def _build_transform_reference(output_dir: Path) -> str:
+    """Build a transformation reference table showing only transforms used in this run.
+
+    Reads ``candidate_evolution.json`` to find which transformation labels
+    appear on edges, and ``transform_suggestions.json`` for LLM-provided
+    rationales. Built-in transforms use the rationale map from contracts.
+    """
+    from contracts import TRANSFORMATION_RATIONALE_MAP
+
+    evo_path = output_dir / "candidate_evolution.json"
+    if not evo_path.is_file():
+        return _static_transform_ref()
+
+    try:
+        evo = json.loads(evo_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return _static_transform_ref()
+
+    edges = evo.get("edges", [])
+    if not edges:
+        return _static_transform_ref()
+
+    # ── Load LLM rationales from transform_suggestions.json ────────────
+    llm_rationales: dict[str, str] = {}
+    suggestions_path = output_dir / "transform_suggestions.json"
+    if suggestions_path.is_file():
+        try:
+            suggestions = json.loads(suggestions_path.read_text(encoding="utf-8-sig"))
+            for s in suggestions:
+                trans_name = s.get("transformation", "")
+                rationale = s.get("rationale", "")
+                if trans_name and rationale:
+                    llm_rationales[trans_name] = rationale
+        except Exception:
+            pass
+
+    # Collect unique transformation labels from edges
+    used_transforms: dict[str, str] = {}
+    for e in edges:
+        trans = e.get("transformation", "")
+        if trans and trans not in used_transforms:
+            # Prefer LLM rationale, then edge rationale, then built-in map
+            if trans in llm_rationales:
+                used_transforms[trans] = llm_rationales[trans]
+            elif e.get("rationale"):
+                used_transforms[trans] = e["rationale"]
+            else:
+                used_transforms[trans] = TRANSFORMATION_RATIONALE_MAP.get(
+                    trans, ""
+                )
+
+    if not used_transforms:
+        return _static_transform_ref()
+
+    rows = []
+    for trans in sorted(used_transforms.keys()):
+        rationale = used_transforms[trans]
+        rows.append(f"| `{trans}` | {rationale} |")
+
+    return f"""
+### Transformation Reference ({len(used_transforms)} used)
+
+| Transformation | Rationale |
+|---------------|-----------|
+{chr(10).join(rows)}
+"""
+
+
+def _static_transform_ref() -> str:
+    """Fallback: full static transformation reference."""
+    return """
+### Transformation Reference
+
+| Transformation | Rationale |
+|---------------|-----------|
+| `flip-sign` | Negative Sharpe — inverting recovers a positive Sharpe from a directionally-wrong factor |
+| `reduce-turnover` | Turnover exceeds 0.8 — smoothing reduces excessive trading and transaction costs |
+| `adjust-lookback` | IC signal is too noisy or too smooth — changing lookback can improve stability |
+| `adjust-smoothing` | Turnover is extreme — adjusting smoothing balances signal decay vs. trading cost |
+| `adjust-clipping` | Extreme outliers are distorting the signal — clipping caps their influence |
+| `adjust-normalization` | Factor distribution is skewed — switching normalization improves comparability |
+| `combine-factors` | Both factors are promising with low correlation — combining diversifies alpha |
+| `simplify` | Expression is over-complex — removing nesting reduces overfit risk |
+| `long-only` | The short leg is underperforming — keeping only longs eliminates dead weight |
+| `short-only` | The long leg is underperforming — keeping only shorts eliminates dead weight |
+| `asymmetric` | Long and short returns are asymmetric — weighting captures the stronger side |
+"""
+
+
 def _write_md(path: Path, mermaid: str, output_dir: str = "", query: str = "") -> None:
     """Write a Mermaid diagram as a Markdown file for VS Code preview.
 
-    Includes a top-10 factors table ranked by Sharpe.
+    Includes a top-10 factors table, backtest configuration, and
+    a transformation reference showing only transforms used in this run.
     """
+    # ── Build backtest config section ──────────────────────────────────
+    config_section = _build_backtest_config_section(Path(output_dir)) if output_dir else ""
+
     # ── Build top-10 table ─────────────────────────────────────────────
     top_table = ""
     if output_dir:
@@ -687,6 +812,9 @@ def _write_md(path: Path, mermaid: str, output_dir: str = "", query: str = "") -
 {chr(10).join(rows)}
 """
 
+    # ── Build transformation reference (only used transforms) ────────
+    transform_ref = _build_transform_reference(Path(output_dir)) if output_dir else _static_transform_ref()
+
     query_section = ""
     if query:
         query_section = f"""
@@ -699,7 +827,7 @@ def _write_md(path: Path, mermaid: str, output_dir: str = "", query: str = "") -
     md = f"""# Factor Evolution Diagram
 
 > Open this file in VS Code with Markdown preview (`Cmd+Shift+V`) to see the rendered graph.
-{query_section}{top_table}
+{query_section}{config_section}{top_table}
 ```mermaid
 {mermaid}
 ```
@@ -730,21 +858,7 @@ def _write_md(path: Path, mermaid: str, output_dir: str = "", query: str = "") -
 
 **Tags:** `high Sharpe` (S≥0.5) · `low Sharpe` (S<0.2) · `high IC` (|IC|≥0.02) · `low IC` (|IC|<0.01) · `high turnover` (TO>0.85) · `low turnover` (TO<0.5) · `high drawdown` (DD<−50%) · `positive return` (AR>0)
 
-### Transformation Reference
-
-| Transformation | Effect | Trigger |
-|---------------|--------|---------|
-| `reduce-turnover` | Smooth with 20-day moving average | high turnover |
-| `adjust-smoothing` | Add or remove decay-linear weighting | turnover too high or low |
-| `adjust-lookback` | Adjust rolling window length by ±50% | IC too noisy or too smooth |
-| `adjust-normalization` | Switch between rank, z-score, or scale | distribution skew |
-| `adjust-clipping` | Clip values to bounded range | extreme outlier spikes |
-| `flip-sign` | Negate the entire expression | negative Sharpe |
-| `asymmetric` | Weight long side more than short side | asymmetric return profile |
-| `long-only` | Keep only positive values (clip at zero) | short side underperforming |
-| `short-only` | Keep only negative values (clip at zero) | long side underperforming |
-| `combine-factors` | Add two z-scored factors together | two promising low-correlation factors |
-| `simplify` | Remove one level of nesting | over-complex expression |
+{transform_ref}
 """
     path.write_text(md, encoding="utf-8")
 
@@ -755,7 +869,7 @@ def _write_md(path: Path, mermaid: str, output_dir: str = "", query: str = "") -
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Optimization loop coordinator for factor-optimize."
+        description="Optimization loop coordinator for factor-loop-evolve."
     )
     parser.add_argument("--summary", action="store_true",
                         help="Generate final optimization summary.")

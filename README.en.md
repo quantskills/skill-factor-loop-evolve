@@ -11,7 +11,7 @@
 
 ## 📖 What Is This
 
-`skill-factor-optimize` is an AI-agent skill for running a **local closed-loop
+`skill-factor-loop-evolve` is an AI-agent skill for running a **local closed-loop
 factor evolution pipeline**. In traditional factor research, the researcher
 manually writes factors, backtests them one by one, analyzes results by hand,
 and improves based on intuition. This skill automates the entire process:
@@ -31,8 +31,10 @@ and improves based on intuition. This skill automates the entire process:
    worked, which templates failed, which structures caused high turnover,
    which variants were too correlated, which refinements improved stability.
 5. **Controlled variant generation** — selects strongest current factors as
-   parents by **actual Sharpe** (highest first), applies 12 transformations
-   with explicit rationale.
+   parents by **actual Sharpe** (highest first). **By default uses LLM-driven
+   semantic transformations** (configurable in `config.json`; falls back to 12
+   hard-coded transforms when disabled). The LLM proposes transforms based on
+   full diagnostic profiles, experience memory, and the original user query.
 6. **Iterate** — repeats steps 1–5 until N rounds complete, improvement
    stalls, or max iterations reached.
 
@@ -42,7 +44,7 @@ and improves based on intuition. This skill automates the entire process:
 
 ## 📥 Input Modes & Examples
 
-The skill accepts factor expressions as input in four ways: **explicit expression**, **random generation**, **user instructions**, or **document extraction**. All inputs must follow the [field/function contract](references/factor-contract.md).
+The skill accepts factor expressions as input in four ways: **explicit expression**, **random generation**, **user instructions**, or **document extraction**.
 
 ### Input 1️⃣: Explicit Factor Expression (most direct)
 
@@ -138,36 +140,48 @@ After a run, `output/<run_id>/` contains:
 
 | File | Content | How to Use |
 |------|---------|------------|
-| `final_summary.json` | **Summary**: optimization log, top 5 factors, worth_keeping, active config, evolution diagram | Read first for high-level picture |
-| `evolution_diagram.md` | **Evolution graph**: Mermaid flowchart with per-node formula + 5 metrics + colored tags | Preview with Cmd+Shift+V in VS Code |
+| `final_summary.json` | **Summary**: optimization log, top 5 factors, Pareto frontier, worth_keeping, original query, active config, evolution diagram | Read first for high-level picture |
+| `evolution_diagram.md` | **Evolution graph**: Mermaid flowchart + backtest config + top 10 factors table + transformation reference (only shows transforms actually used, with LLM rationales) | Preview with Cmd+Shift+V in VS Code |
 | `diagnosis.json` | **Diagnosis**: per-factor class, Sharpe, IC, turnover, suggestions | Deep-dive into each factor |
-| `backtest_results.json` | **Latest backtest**: detailed per-factor metrics | Raw return series, IC series |
-| `backtest_results_all.json` | **All backtests**: accumulated results across iterations | Compare metrics across iterations |
-| `knowledge_base.json` | **Experience memory**: successful patterns, field effectiveness | Understand what consistently works |
+| `backtest_results_all.json` | **All backtests**: accumulated results across all iterations | Compare metrics across iterations |
+| `knowledge_base.json` | **Experience memory**: successful patterns, failed patterns, field effectiveness | Understand what consistently works |
+| `transform_suggestions.json` | **LLM suggestions**: specific transforms proposed by LLM with detailed rationales (kept in LLM mode) | Understand LLM's transform reasoning |
+| `candidate_evolution.json` | **Genealogy tree**: parent-child relationships with per-node metrics + original query | Trace factor evolution path |
 | `config.json` | **Run config**: full config snapshot | Reproduce the run |
 
 ---
 
 ## 🧬 Evolution: How Transformations Work
 
-### Controlled Transformations
+### Transformation Mode
 
-Up to 5 transformations per parent, applied in priority order:
+Controlled by `config.json` → `transformations.use_llm_transforms`:
 
-| Transformation | Trigger | Effect | Rationale |
-|---------------|---------|--------|-----------|
-| **flip-sign** | Sharpe < −0.3 | Negate whole expression | Negative Sharpe → flip yields positive |
-| **reduce-turnover** | Turnover > 0.8 | Wrap in `ts_mean()` to smooth | High turnover → reduce trading frequency |
-| **adjust-lookback** | Turnover < 0.3 or noisy IC | Adjust window ±30–50% | Too stable → change sensitivity |
-| **adjust-smoothing** | Extreme turnover | Change decay/smoothing params | Optimize signal decay |
-| **adjust-clipping** | Extreme outliers | Add/adjust sigma clipping | Outliers → cap extremes |
-| **adjust-normalization** | Distribution skew | Switch norm (zscore/rank/min-max) | Skew → improve statistics |
-| **combine-factors** | Both promising, low corr | Weighted merge of two expressions | Complementary → combine |
-| **simplify** | Over-complex expression | Remove redundant nesting | Complex → reduce overfit risk |
-| **remove-component** | Weak/noisy component | Drop weak sub-expression | Noise → purify signal |
-| **long-only** | Short side underperforms | Zero out short leg | Dead short → long only |
-| **short-only** | Long side underperforms | Zero out long leg | Dead long → short only |
-| **asymmetric** | Asymmetric long/short returns | Different weights per side | Asymmetry → optimize ratio |
+- **`true` (default)** — LLM-driven semantic transformations. The LLM receives
+  each parent factor's full diagnostic profile (Sharpe, IC, turnover, drawdown,
+  long/short returns), experience memory (successful/failed patterns, field
+  effectiveness), and the original user query. It proposes semantically
+  meaningful changes
+- **`false`** — original 12 hard-coded transformations.
+
+Override with `--use-llm` (force LLM) or `--no-llm` (force static).
+
+### Static Transformations (when LLM is disabled)
+
+| Transformation | Rationale |
+|---------------|-----------|
+| `flip-sign` | Negative Sharpe — inverting recovers a positive Sharpe from a directionally-wrong factor |
+| `reduce-turnover` | Turnover > 0.8 — smoothing reduces excessive trading and transaction costs |
+| `adjust-lookback` | IC signal too noisy or too smooth — changing lookback window can improve stability |
+| `adjust-smoothing` | Turnover extreme — adjusting smoothing balances signal decay vs. trading cost |
+| `adjust-clipping` | Extreme outliers distort the signal — clipping caps their influence |
+| `adjust-normalization` | Distribution skewed — switching normalization improves cross-sectional comparability |
+| `combine-factors` | Both promising with low correlation — combining diversifies the alpha source |
+| `simplify` | Expression over-complex — removing nesting reduces overfit risk |
+| `remove-component` | Sub-component is weak — removing it purifies the remaining signal |
+| `long-only` | Short leg underperforming — keeping only longs eliminates dead-weight shorts |
+| `short-only` | Long leg underperforming — keeping only shorts eliminates dead-weight longs |
+| `asymmetric` | Long/short returns asymmetric — weighting captures the stronger side more heavily |
 
 ---
 
@@ -201,12 +215,16 @@ Agent:
 2. Place initial candidates as candidates.json
 3. For each iteration:
    - Validate: python scripts/validator.py --factors candidates.json
-   - Backtest: python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json
-   - Diagnose: python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json
+   - Backtest: python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
+   - Diagnose: python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
    - Learn: python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
-   - Generate: python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
+   - LLM transforms (default):
+     python scripts/llm_suggest.py --generate-prompt ... → feed to LLM → save response →
+     python scripts/llm_suggest.py --apply-response ... → produces transform_suggestions.json
+   - Generate: python scripts/generate_candidates.py ... --query "$USER_QUERY"
+     (auto-detects and uses LLM suggestions by default; falls back to static if not found)
 4. Summary: python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
-5. Report: optimization log, top 5 factors, worth keeping, key patterns
+5. Report: optimization log, top 5 factors, Pareto frontier, worth keeping, key patterns
 ```
 
 ### Direct Tool Usage
@@ -220,10 +238,14 @@ python scripts/knowledge_base.py --init --output "$FACTOR_OPTIMIZE_RUN_DIR/knowl
 
 # Validate → backtest → diagnose → learn → generate (repeat per iteration)
 python scripts/validator.py --factors candidates.json
-python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json
-python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json
+python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
+python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
 python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
-python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
+
+# 🆕 LLM transforms by default (auto-detects transform_suggestions.json; falls back gracefully)
+python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
+# Or force static transforms:
+python scripts/generate_candidates.py ... --no-llm
 
 # Final summary
 python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
@@ -237,7 +259,7 @@ for pipeline continuity across script calls.
 ## 📦 Directory Structure
 
 ```
-skill-factor-optimize/
+skill-factor-loop-evolve/
 ├── SKILL.md                              # Entry point (YAML + agent instructions)
 ├── README.md / README.en.md              # Documentation
 ├── config.json                           # All hyperparameters + _help docs
@@ -252,22 +274,23 @@ skill-factor-optimize/
 │   ├── validator.py                      # 🧪 Factor validator (syntax, look-ahead, stability)
 │   ├── backtest.py                       # 📊 Backtest engine (PandaData real A-share data)
 │   ├── diagnose.py                       # 🔍 Factor diagnosis & classification
-│   ├── knowledge_base.py                 # 🧠 Experience memory management
-│   ├── generate_candidates.py            # 🔀 Controlled variant generation
-│   └── optimizer.py                      # 🔁 Loop coordinator + evolution diagram
+│   ├── knowledge_base.py                 # 🧠 Experience memory + active learning
+│   ├── generate_candidates.py            # 🔀 Variant generation (LLM-first, static fallback)
+│   ├── llm_suggest.py                    # 🤖 LLM transform suggestion engine
+│   └── optimizer.py                      # 🔁 Loop coordinator + evolution diagram + Pareto frontier
 ├── agents/
 │   ├── openai.yaml                       # OpenAI/Codex adapter
 │   ├── cursor-rule.mdc                   # Cursor rule adapter
 │   └── portable-loader.md                # Generic agent loader
 └── output/
     └── <run-id>/                         # One subfolder per run
-        ├── backtest_results.json         # Latest iteration backtest
         ├── backtest_results_all.json     # All iterations accumulated
         ├── diagnosis.json                # Classification + metrics + suggestions
         ├── knowledge_base.json           # Experience memory
-        ├── candidate_evolution.json      # Full genealogy tree
-        ├── final_summary.json            # Summary report
-        ├── evolution_diagram.md          # Mermaid evolution graph
+        ├── candidate_evolution.json      # Full genealogy tree + original query
+        ├── transform_suggestions.json    # LLM transform suggestions (LLM mode)
+        ├── final_summary.json            # Summary report + Pareto frontier
+        ├── evolution_diagram.md          # Mermaid evolution graph + backtest config
         ├── config.json                   # Run config (reproducible)
         └── trading_data/                 # CSV: returns, IC, positions
 ```

@@ -23,9 +23,9 @@ pipeline, or improve a factor library through closed-loop research:
    a. Validate:
       python <<SKILL_ROOT>>/scripts/validator.py --factors candidates.json
    b. Backtest:
-      python <<SKILL_ROOT>>/scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json
+      python <<SKILL_ROOT>>/scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
    c. Diagnose:
-      python <<SKILL_ROOT>>/scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json
+      python <<SKILL_ROOT>>/scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
    d. Learn:
       python <<SKILL_ROOT>>/scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
    e. Check stopping criteria (stall, max iterations).

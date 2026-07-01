@@ -2,7 +2,7 @@
 
 This document defines the optimization loop protocol, factor classification
 taxonomy, transformation catalog, and stopping criteria for
-`skill-factor-optimize` (factor-loop-evolve).
+`skill-factor-loop-evolve`.
 
 ---
 
@@ -41,7 +41,8 @@ are eligible — no classification-based filtering.
 
 The backtest engine uses **PandaData API** to fetch real A-share daily OHLCV
 data. Credentials are read from a `.env` file in the skill root. PandaData is
-mandatory — no synthetic fallback.
+the default live-data path. A local OHLCV CSV can be supplied with
+`backtest.py --data` for offline or fixture-based runs.
 
 All parameters are configured in `config.json` (section `backtest`):
 
@@ -89,29 +90,29 @@ transformation must have an explicit rationale based on diagnostics.
 
 ### 4.1 Parameter Adjustments
 
-| Transformation        | Description                          | Rationale Trigger             |
-| --------------------- | ------------------------------------ | ---------------------------- |
-| `adjust-lookback`     | Change rolling window n by ±50%      | IC too noisy or too smooth   |
-| `adjust-smoothing`    | Add/remove decay_linear or ts_mean   | Turnover too high or too low |
-| `adjust-clipping`     | Add/remove clip() or winsorization   | Extreme outlier spikes       |
-| `adjust-normalization`| Switch rank/zscore/scale             | Distribution skew issues     |
+| Transformation        | Rationale |
+| --------------------- | --------- |
+| `adjust-lookback`     | IC signal too noisy or too smooth — changing lookback window can improve stability |
+| `adjust-smoothing`    | Turnover extreme — adjusting smoothing balances signal decay speed vs. trading cost |
+| `adjust-clipping`     | Extreme outliers distort the signal — clipping caps their influence for more robust rankings |
+| `adjust-normalization`| Distribution skewed — switching normalization improves cross-sectional comparability |
 
 ### 4.2 Structural Transformations
 
-| Transformation        | Description                          | Rationale Trigger             |
-| --------------------- | ------------------------------------ | ---------------------------- |
-| `combine-factors`     | Arithmetic combination of 2 parents  | Both individually promising, low correlation (< 0.3) |
-| `simplify`            | Remove one function/term             | Over-complex, high turnover  |
-| `reduce-turnover`     | Increase smoothing or lookback       | Turnover > 0.8               |
-| `remove-component`    | Drop one additive/subtractive term   | Weak or noisy component      |
+| Transformation        | Rationale |
+| --------------------- | --------- |
+| `combine-factors`     | Both promising with low correlation — combining diversifies the alpha source |
+| `simplify`            | Expression over-complex — removing nesting reduces overfit risk |
+| `reduce-turnover`     | Turnover > 0.8 — smoothing reduces excessive trading and transaction costs |
+| `remove-component`    | Sub-component is weak — removing it purifies the remaining signal |
 
 ### 4.3 Directional Transformations
 
-| Transformation        | Description                          | Rationale Trigger             |
-| --------------------- | ------------------------------------ | ---------------------------- |
-| `long-only`           | clip(x, 0, inf)                      | Short side underperforming   |
-| `short-only`          | -clip(x, 0, inf)                     | Long side underperforming    |
-| `asymmetric`          | Different weights for long vs short  | Asymmetric return profile    |
+| Transformation        | Rationale |
+| --------------------- | --------- |
+| `long-only`           | Short leg underperforming — keeping only longs eliminates dead-weight shorts |
+| `short-only`          | Long leg underperforming — keeping only shorts eliminates dead-weight longs |
+| `asymmetric`          | Long/short returns asymmetric — weighting captures the stronger side more heavily |
 
 ### 4.4 Prohibited Operations
 
@@ -182,13 +183,12 @@ skill root. Intermediate files (validated_factors.json, next_candidates.json,
 candidates.json) are cleaned after the run.
 
 ```
-skill-factor-optimize/
+skill-factor-loop-evolve/
 ├── config.json                      # Hyperparameters (at skill root)
 ├── .env                             # PandaData credentials (at skill root)
 └── output/
     └── <run-id>/                    # One subfolder per run
-        ├── backtest_results.json    # Latest iteration backtest
-        ├── backtest_results_all.json # All iterations accumulated
+        ├── backtest_results_all.json # All iterations accumulated (single source of truth)
         ├── diagnosis.json           # Classification + metrics + suggestions
         ├── knowledge_base.json      # Experience memory
         ├── candidate_evolution.json # Full genealogy tree

@@ -5,24 +5,17 @@ description: >-
   learn, generate variants, repeat for N iterations. Factors evolve
   through controlled transformations toward higher Sharpe.
 license: GPL-3.0-only
-metadata:
+quantSkills:
   organization: QuantSkills
   organization_url: https://github.com/quantskills
-  repository: factor-loop-evolve
-  repository_url: https://github.com/quantskills/factor-loop-evolve
+  repository: skill-factor-loop-evolve
+  repository_url: https://github.com/quantskills/skill-factor-loop-evolve
   project_type: skill
   collection: factor-optimization
   creator: davideliu
   creator_url: https://github.com/davideliu
   maintainer: davideliu
   maintainer_url: https://github.com/davideliu
-quantSkills:
-  organization: QuantSkills
-  organization_url: https://github.com/quantskills
-  repository: factor-loop-evolve
-  repository_url: https://github.com/quantskills/factor-loop-evolve
-  project_type: skill
-  collection: factor-optimization
   category: factor
   tags:
     - factor-optimization
@@ -70,7 +63,8 @@ This skill provides:
   configurable intervals, goes long top quintile and short bottom quintile.
   Forward returns are computed from the rebalance date with **no look-ahead
   bias**. Turnover is measured from actual position changes between
-  rebalance periods. **PandaData is required**.
+  rebalance periods. PandaData is the default live-data source; local OHLCV
+  CSV input is also supported through `backtest.py --data`.
 - A **diagnosis system** — classifies each factor using first-match:
   invalid → overfit → unstable → duplicate → weak → promising.
   All thresholds in `config.json`.
@@ -79,12 +73,23 @@ This skill provides:
   high turnover, which variants were too correlated, and which refinements
   improved stability.
 - A **variant generator** — selects the strongest current factors as parents
-  by **actual Sharpe** (highest first, no abs). Applies 12 controlled
-  transformations including `flip-sign` for negative Sharpe factors,
-  `reduce-turnover` for high turnover, and `adjust-lookback`/`smoothing`/
-  `clipping`/`normalization` with explicit rationale.
+  by **actual Sharpe** (highest first, no abs). By default uses **LLM-driven
+  semantic transformations** (configurable via `use_llm_transforms`); falls
+  back to 12 hard-coded transformations when disabled. LLM-proposed transforms
+  are based on full diagnostic profiles, knowledge base insights, and the
+  original user query.
 - An **optimization loop coordinator** — manages N iterations, updates
   experience after each iteration, stops when improvement stalls.
+- 🆕 **LLM-driven transformation engine** (`scripts/llm_suggest.py`) —
+  generates structured prompts for the agent to feed to an LLM, then applies
+  the LLM's ranked semantic transform suggestions. Enabled by default
+  (`config.json → transformations.use_llm_transforms: true`).
+- 🆕 **Active knowledge base** — field diversity boosts reward exploration
+  of underexplored fields; failed-pattern penalties avoid repeating mistakes;
+  convergence detection warns when the system hits a local optimum.
+- 🆕 **Pareto frontier reporting** — multi-objective optimization trade-off
+  analysis (Sharpe vs. Turnover vs. Drawdown) identifies non-dominated
+  factors optimal for different deployment scenarios.
 - A **config system** — all thresholds in `config.json` with `_help`
   documentation. Full config saved with each run for reproducibility.
 
@@ -92,11 +97,11 @@ This skill provides:
 
 - Creator: `davideliu` (`https://github.com/davideliu`).
 - Maintainer: `davideliu` for the QuantSkills community.
-- Repository: `https://github.com/quantskills/skill-factor-optimize`.
+- Repository: `https://github.com/quantskills/skill-factor-loop-evolve`.
 - License: GNU General Public License v3.0 only (`GPL-3.0-only`).
 - Scope: Local closed-loop factor research and optimization from OHLCV data.
-  Uses PandaData API for real A-share market data (credentials from ``.env``).
-  PandaData is mandatory — the skill does not use synthetic fallback data.
+  Uses PandaData API for real A-share market data by default (credentials from
+  ``.env``), or a local OHLCV CSV supplied with `backtest.py --data`.
   The skill is not official investment advice, a certified data product, or
   a guarantee of trading performance.
 
@@ -118,15 +123,21 @@ This skill provides:
 ### Iteration 1..N: Optimize Loop
 
 5. **Run backtest** — `python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json`
-   Uses PandaData API (CSI 300, 2024-2025 by default). Configurable via `config.json`.
+   Uses PandaData API (CSI 300, 2024-2025 by default), unless `--data <ohlcv.csv>`
+   is supplied. Configurable via `config.json`.
 6. **Diagnose** — `python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json`
    Classifies each factor. Output is flattened (sharpe, ic_mean, turnover directly, no nested metrics dict).
 7. **Learn** — `python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json`
    Updates experience memory with successful patterns and lessons.
 8. **Check stopping** — if Sharpe unchanged for 2 iterations or max iterations reached, go to step 10.
-9. **Generate next batch** — `python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json`
-   Parent selection: sorts by actual Sharpe (highest first), skips correlated duplicates (>0.7), takes top N.
-   Applies up to 5 transformations per parent. Then validate and go to step 5.
+9. **Generate next batch** — `python scripts/generate_candidates.py ...`
+   Parent selection: sorts by actual Sharpe (highest first), skips correlated duplicates
+   (relaxing threshold from 0.7 → 0.85 → 0.95 to guarantee 3 parents), selects exactly 3.
+   **By default, uses LLM-driven semantic transforms** (auto-detects `transform_suggestions.json`;
+   falls back to hard-coded transforms if not available). Controlled by `transformations.use_llm_transforms`
+   in `config.json` (`true` = LLM priority, `false` = static transforms only).
+   Override with `--use-llm` (force LLM), `--no-llm` (force static), or `--no-active-kb` (disable diversity boosts).
+   Then validate and go to step 5.
 10. **Final report** — `python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json`
     Produces concise report + evolution diagram + copies config.json.
 
@@ -135,7 +146,7 @@ This skill provides:
 All files live inside ``output/<run-id>/``. Intermediate files are cleaned
 after the run. The skill root stays clean (only `config.json` and `.env`).
 
-**Final output (8 files + trading_data):**
+**Final output (8–10 files + trading_data):**
 
 | File | Content |
 |------|---------|
@@ -143,10 +154,13 @@ after the run. The skill root stays clean (only `config.json` and `.env`).
 | `diagnosis.json` | Classification + key metrics (S, IC, TO) + suggestions (flattened) |
 | `knowledge_base.json` | Experience memory: successful patterns, error log, field effectiveness |
 | `candidate_evolution.json` | Full genealogy tree with per-node metrics |
-| `final_summary.json` | Optimization log, top 5 factors, worth_keeping, original query, active config, evolution diagram |
+| `final_summary.json` | Optimization log, top 5 factors, Pareto frontier, worth_keeping, original query, active config, evolution diagram |
 | `config.json` | Full config used for this run (reproducibility) |
-| `evolution_diagram.md` | Mermaid graph + original query + top-10 filtered table (open with Cmd+Shift+V) |
+| `evolution_diagram.md` | Mermaid graph + original query + top-10 table + Pareto frontier (open with Cmd+Shift+V) |
+| `transform_suggestions.json` | 🆕 LLM-suggested transforms (kept if `--use-llm` enabled) |
 | `trading_data/` | CSV: portfolio returns, IC series, positions |
+
+`transform_prompt.md` and `llm_response.json` are intermediate and cleaned after the run.
 
 No `validated_factors.json` or `validated_factors_passed.json` or
 `next_candidates.json` in final output — these are intermediate and cleaned.
@@ -161,6 +175,7 @@ Read `final_summary.json` first for the high-level picture:
   `ic_mean`, `turnover`, `annual_return`, `expression`, `classification`.
 - **`worth_keeping`**: `true` if best Sharpe ≥ `worth_keeping_sharpe_threshold` (default 0.3).
 - **`query`**: the original user input query that initiated this factor evolution run.
+- **`pareto_frontier`**: 🆕 non-dominated factors across Sharpe, turnover, and drawdown — each optimal in at least one trade-off dimension.
 - **`evolution_diagram`**: raw Mermaid string rendered in `evolution_diagram.md`.
 - **`active_config`**: full config snapshot for reproducibility.
 
@@ -192,39 +207,38 @@ For cross-iteration trend, read `backtest_results_all.json`:
 
 ### Parent Selection Rule
 
-Sort by actual Sharpe (highest first), skip correlated duplicates (>0.7),
-take top N (default 3). No classification filtering — ALL factors with
-valid Sharpe are eligible.
+Sort by actual Sharpe (highest first), skip correlated duplicates using
+progressively relaxed thresholds (0.7 → 0.85 → 0.95) to guarantee exactly
+3 parents are selected (or as many valid factors as exist). No classification
+filtering — ALL factors with valid Sharpe are eligible.
 
 ## Transformation Reference
 
-The 12 controlled transformations, their triggers, and rationale:
+The 12 controlled transformations and the rationale behind each:
 
-| Transformation | Trigger | Effect | Rationale |
-|---------------|---------|--------|-----------|
-| `flip-sign` | Sharpe < −0.3 | Negate whole expression | Negative Sharpe → flip yields positive |
-| `reduce-turnover` | Turnover > 0.8 | Wrap in `ts_mean()` | High turnover → smooth signal |
-| `adjust-lookback` | Turnover < 0.3 or noisy IC | Adjust window ±30–50% | Too stable → change sensitivity |
-| `adjust-smoothing` | Extreme turnover | Change decay/smoothing | Optimize signal decay speed |
-| `adjust-clipping` | Extreme outliers | Add/adjust sigma clipping | Outliers → cap extremes |
-| `adjust-normalization` | Distribution skew | Switch norm (zscore/rank/min-max) | Skew → improve statistical properties |
-| `combine-factors` | Both promising, low corr | Weighted merge of two | Complementary → combine |
-| `simplify` | Over-complex expression | Remove redundant nesting | Complex → reduce overfit risk |
-| `remove-component` | Weak/noisy component | Drop weak sub-expression | Noise → purify signal |
-| `long-only` | Short side underperforming | Zero out short leg | Short dead weight → long only |
-| `short-only` | Long side underperforming | Zero out long leg | Long dead weight → short only |
-| `asymmetric` | Asymmetric long/short returns | Different weights per side | Asymmetry → optimize ratio |
+| Transformation | Rationale |
+|---------------|-----------|
+| `flip-sign` | Negative Sharpe — inverting recovers a positive Sharpe from a directionally-wrong factor |
+| `reduce-turnover` | Turnover > 0.8 — smoothing reduces excessive trading and transaction costs |
+| `adjust-lookback` | IC signal too noisy or too smooth — changing lookback window can improve stability |
+| `adjust-smoothing` | Turnover extreme — adjusting smoothing balances signal decay speed vs. trading cost |
+| `adjust-clipping` | Extreme outliers distort the signal — clipping caps their influence for more robust rankings |
+| `adjust-normalization` | Distribution skewed — switching normalization improves cross-sectional comparability |
+| `combine-factors` | Both promising with low correlation — combining diversifies the alpha source |
+| `simplify` | Expression over-complex — removing nesting reduces overfit risk |
+| `remove-component` | Sub-component is weak — removing it purifies the remaining signal |
+| `long-only` | Short leg underperforming — keeping only longs eliminates dead-weight shorts |
+| `short-only` | Long leg underperforming — keeping only shorts eliminates dead-weight longs |
+| `asymmetric` | Long/short returns asymmetric — weighting captures the stronger side more heavily |
 
 `flip-sign` is applied **first** (before other transforms) so negative-Sharpe
-factors can become positive before further refinement. Up to
-`max_transforms_per_parent` (default 5) transforms per parent.
+factors can become positive before further refinement.
+5 transformations per parent (fixed).
 
 `combine-factors` is applied as a **fallback** when fewer than
 `max_candidates` candidates are generated from per-parent transforms — it
 merges two low-correlation parents. `remove-component` is not yet implemented
-(always returns None). The other 10 transforms all work, though `simplify`
-(requires >3 nesting levels), `long-only`, `short-only`, and `asymmetric`
-(require no existing `clip()`) only trigger under specific conditions.
+(always returns None).
 
 ## Calling Pattern
 
@@ -248,8 +262,26 @@ python scripts/diagnose.py --results backtest_results_all.json --factors validat
 python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
 
 # Generate next candidates → next_candidates.json (intermediate)
-# Pass --query with the original user input to track it through the run
+# 🆕 LLM-driven transformations are the DEFAULT (config: use_llm_transforms=true)
+# Auto-detects transform_suggestions.json; falls back to static transforms if not found.
+
+# Default — LLM priority (auto-detects suggestions, graceful fallback):
 python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
+
+# Force static (hard-coded) transforms only:
+python scripts/generate_candidates.py ... --no-llm
+
+# LLM pipeline (agent orchestrates the LLM call before generating):
+# Step 1: Generate LLM prompt
+python scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md
+# Step 2: Feed transform_prompt.md to LLM → save response as llm_response.json
+# Step 3: Apply LLM response
+python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json
+# Step 4: Generate with LLM suggestions (auto-detected when config.use_llm_transforms=true)
+python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
+
+# 🆕 Disable active KB if desired:
+python scripts/generate_candidates.py ... --no-active-kb
 
 # After last iteration — final summary → final_summary.json + evolution_diagram.md + config.json
 python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
@@ -313,7 +345,7 @@ run evolving momentum factors.
 ### Quick Run Script
 
 ```bash
-cd skill-factor-optimize
+cd skill-factor-loop-evolve
 export FACTOR_OPTIMIZE_RUN_DIR="output/run_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$FACTOR_OPTIMIZE_RUN_DIR"
 
@@ -409,7 +441,8 @@ pip install panda_data/panda_data-0.1.0-py3-none-any.whl
 - `references/agent-integration.md` — multi-agent install and smoke test.
 - `scripts/contracts.py` — shared contract definitions (single source of truth).
 - `scripts/validator.py` — toy-data validator with look-ahead bias and stability checks.
-- `scripts/backtest.py` — backtest engine powered by PandaData API (real A-share data).
+- `scripts/backtest.py` — backtest engine using PandaData API by default, or a
+  local OHLCV CSV via `--data`.
 - `scripts/diagnose.py` — factor diagnosis and classification.
 - `scripts/knowledge_base.py` — experience memory management.
 - `scripts/generate_candidates.py` — controlled variant generation.

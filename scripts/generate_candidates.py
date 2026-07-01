@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Controlled variant generator for skill-factor-optimize.
+"""Controlled variant generator for skill-factor-loop-evolve.
 
 Selects the strongest current factors as parents and applies controlled
 transformations (adjust lookback, change smoothing, add/remove clipping,
@@ -19,19 +19,29 @@ import json
 import sys
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from contracts import (  # noqa: E402
-    VALID_TRANSFORMATIONS,
     TRANSFORMATION_RATIONALE_MAP,
     MIN_PARENTS,
     MAX_PARENTS,
     MIN_TRANSFORMS,
     MAX_TRANSFORMS,
+    REDUCE_TURNOVER_THRESHOLD,
+    LOW_TURNOVER_THRESHOLD,
+    FLIP_SIGN_SHARPE_THRESHOLD,
+    USE_LLM_TRANSFORMS,
     output_path as _resolve_output,
 )
+
+# Try importing active KB functions (graceful fallback if not available)
+try:
+    from knowledge_base import (  # noqa: E402
+        get_parent_diversity_boost,
+    )
+    _HAS_ACTIVE_KB = True
+except ImportError:
+    _HAS_ACTIVE_KB = False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -41,11 +51,18 @@ from contracts import (  # noqa: E402
 def select_parents(
     diagnosis: dict,
     max_parents: int = 3,
+    knowledge_base: dict | None = None,
+    use_active_kb: bool = True,
 ) -> list[dict]:
-    """Select the best factors as parents for variant generation.
+    """Select exactly max_parents factors as parents (or as many valid as exist).
 
-    Simple rule: sort by actual Sharpe (highest first), skip duplicates
-    (correlation > 0.7 with an already-selected parent), take top N.
+    Sort by actual Sharpe (highest first), skip duplicates using progressively
+    relaxed correlation thresholds (0.7 → 0.85 → 0.95 → no filter) to guarantee
+    the target count is reached.
+
+    When ``use_active_kb`` is True and ``knowledge_base`` is provided,
+    applies diversity boosts: factors using underexplored fields get a
+    small bonus, factors similar to failed patterns get a penalty.
 
     No classification filtering. No abs(). Higher Sharpe = better parent.
     """
@@ -57,19 +74,49 @@ def select_parents(
     # Sort by actual Sharpe — highest first
     valid.sort(key=lambda d: d.get("sharpe") or 0, reverse=True)
 
-    # Remove duplicates (factors correlated > 0.7 with already-selected)
-    selected = []
-    for p in valid:
-        if len(selected) >= max_parents:
-            break
-        is_duplicate = False
-        for sel in selected:
-            for key, corr in diagnosis.get("correlations", {}).items():
-                if p["name"] in key and sel["name"] in key and corr > 0.7:
-                    is_duplicate = True
-                    break
-        if not is_duplicate:
-            selected.append(p)
+    # ── Active KB: apply diversity boosts ────────────────────────────
+    if use_active_kb and _HAS_ACTIVE_KB and knowledge_base:
+        valid = get_parent_diversity_boost(valid, knowledge_base)
+        # Re-sort by effective Sharpe (base + boost)
+        valid.sort(key=lambda d: d.get("_effective_sharpe", d.get("sharpe") or 0), reverse=True)
+
+    # Select parents, guaranteeing max_parents (or as many valid factors as exist)
+    selected = _select_up_to_n(valid, diagnosis, max_parents)
+
+    return selected
+
+
+def _select_up_to_n(
+    candidates: list[dict],
+    diagnosis: dict,
+    n: int,
+) -> list[dict]:
+    """Select up to n parents, relaxing the correlation threshold if needed.
+
+    Tries correlation thresholds 0.7 → 0.85 → 0.95 → no filter,
+    guaranteeing at least min(n, len(candidates)) parents.
+    """
+    correlations = diagnosis.get("correlations", {})
+
+    for threshold in (0.7, 0.85, 0.95, 1.0):
+        selected = []
+        for p in candidates:
+            if len(selected) >= n:
+                break
+            is_duplicate = False
+            if threshold < 1.0:
+                for sel in selected:
+                    for key, corr in correlations.items():
+                        if p["name"] in key and sel["name"] in key and corr > threshold:
+                            is_duplicate = True
+                            break
+                    if is_duplicate:
+                        break
+            if not is_duplicate:
+                selected.append(p)
+
+        if len(selected) >= n or threshold == 1.0:
+            return selected
 
     return selected
 
@@ -97,7 +144,6 @@ def apply_transformation(
     expr = parent.get("expression", "")
     sharpe = parent.get("sharpe") or 0
     turnover = parent.get("turnover") or 0
-    ic_mean = parent.get("ic_mean")
 
     rationale = TRANSFORMATION_RATIONALE_MAP.get(transformation, "Diagnostic-driven improvement")
 
@@ -291,13 +337,13 @@ def determine_transformations(
 
     # Flip sign FIRST — most impactful transform for negative Sharpe
     sharpe_val = parent.get("sharpe") or 0
-    if sharpe_val < -0.3:
+    if sharpe_val < FLIP_SIGN_SHARPE_THRESHOLD:
         applicable.append("flip-sign")
 
     turnover = parent.get("turnover", 0)
-    if turnover > 0.8:
+    if turnover > REDUCE_TURNOVER_THRESHOLD:
         applicable.extend(["reduce-turnover", "adjust-smoothing"])
-    if turnover < 0.3:
+    if turnover < LOW_TURNOVER_THRESHOLD:
         applicable.append("adjust-lookback")
 
     # Always try lookback adjustment and normalization
@@ -339,15 +385,31 @@ def determine_transformations(
 
     # Clamp to [min_transforms, max_transforms]
     result = result[:max_transforms]
-    # Ensure we have at least min_transforms (pad with safe defaults if needed)
-    defaults = ["adjust-lookback", "adjust-normalization", "adjust-clipping"]
+    # Ensure we have at least min_transforms (pad with safe defaults if needed).
+    # Keep this finite: some parents already contain every default transform.
+    defaults = [
+        "adjust-lookback",
+        "adjust-normalization",
+        "adjust-clipping",
+        "reduce-turnover",
+        "adjust-smoothing",
+        "flip-sign",
+        "simplify",
+        "long-only",
+        "short-only",
+        "asymmetric",
+    ]
     while len(result) < min_transforms:
+        added = False
         for d in defaults:
             if d not in seen and len(result) < min_transforms:
                 result.append(d)
                 seen.add(d)
+                added = True
             if len(result) >= min_transforms:
                 break
+        if not added:
+            break
 
     return result
 
@@ -355,6 +417,45 @@ def determine_transformations(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Main Generator
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def _normalize_expr(expr: str) -> str:
+    """Normalize an expression for comparison: strip whitespace, remove outer parens."""
+    return expr.strip().replace(" ", "").strip("()")
+
+
+def _apply_single_llm_transform(
+    suggestion: dict,
+    parent_lookup: dict[str, dict],
+) -> dict | None:
+    """Convert an LLM transform suggestion into a candidate factor dict.
+
+    Validates that the suggested expression is non-empty and different
+    from the parent. Performs basic sanity checks.
+    """
+    expr = suggestion.get("expression", "").strip()
+    if not expr:
+        return None
+
+    parent_name = suggestion.get("parent", "")
+    parent = parent_lookup.get(parent_name, {})
+    parent_expr = parent.get("expression", "")
+
+    # Skip if expression is identical to parent (normalize whitespace for comparison)
+    if _normalize_expr(expr) == _normalize_expr(parent_expr):
+        return None
+
+    name = suggestion.get("name", f"{parent_name}_llm_variant")
+    return {
+        "name": name,
+        "expression": expr,
+        "description": suggestion.get("description", f"LLM-suggested variant of {parent_name}"),
+        "rationale": suggestion.get("rationale", "LLM-driven transformation"),
+        "expected_impact": suggestion.get("expected_impact", ""),
+        "generation": "llm-transform",
+        "parent": parent_name,
+        "transformation": suggestion.get("transformation", "llm-suggested"),
+    }
+
 
 def generate_candidates(
     diagnosis: dict,
@@ -364,6 +465,8 @@ def generate_candidates(
     max_parents: int = 3,
     min_transforms: int = 1,
     max_transforms: int = 5,
+    llm_suggestions: list[dict] | None = None,
+    use_active_kb: bool = True,
 ) -> list[dict]:
     """Generate the next batch of factor candidates.
 
@@ -375,30 +478,62 @@ def generate_candidates(
         max_parents: Maximum parent factors to select.
         min_transforms: Minimum transformations per parent.
         max_transforms: Maximum transformations per parent.
+        llm_suggestions: Optional LLM-suggested transforms (bypasses rule-based).
+        use_active_kb: Whether to apply active KB diversity boosts.
 
     Returns:
         List of new factor candidates.
     """
-    parents = select_parents(diagnosis, max_parents=max_parents)
+    parents = select_parents(
+        diagnosis,
+        max_parents=max_parents,
+        knowledge_base=knowledge_base,
+        use_active_kb=use_active_kb,
+    )
     candidates = []
-
     factor_index = 0
+    used_llm = False
 
-    # Generate variants from each parent
-    for parent in parents:
-        transformations = determine_transformations(
-            parent,
-            min_transforms=min_transforms,
-            max_transforms=max_transforms,
-        )
+    # ── LLM-Driven Path ───────────────────────────────────────────────
+    if llm_suggestions:
+        used_llm = True
+        parent_lookup = {p["name"]: p for p in parents}
+        # Also include all diagnostics for parent lookup
+        for d in diagnosis.get("diagnostics", []):
+            if d["name"] not in parent_lookup:
+                parent_lookup[d["name"]] = d
 
-        for trans in transformations:
+        # Sort LLM suggestions by rank
+        llm_suggestions.sort(key=lambda s: s.get("rank", 99))
+
+        for suggestion in llm_suggestions:
             if len(candidates) >= max_candidates:
                 break
-            new_factor = apply_transformation(parent, trans, factor_index)
+            new_factor = _apply_single_llm_transform(suggestion, parent_lookup)
             if new_factor:
                 candidates.append(new_factor)
                 factor_index += 1
+
+        # If LLM didn't give enough candidates, keep what we have — no rule-based fallback
+        if len(candidates) < min_parents:
+            print(f"[WARN] LLM produced only {len(candidates)} candidates (< {min_parents}). Proceeding with available candidates.", file=sys.stderr)
+
+    # ── Rule-Based Path (original logic) ──────────────────────────────
+    if not used_llm:
+        for parent in parents:
+            transformations = determine_transformations(
+                parent,
+                min_transforms=min_transforms,
+                max_transforms=max_transforms,
+            )
+
+            for trans in transformations:
+                if len(candidates) >= max_candidates:
+                    break
+                new_factor = apply_transformation(parent, trans, factor_index)
+                if new_factor:
+                    candidates.append(new_factor)
+                    factor_index += 1
 
     # If we didn't get enough candidates, try combining promising factors
     if len(candidates) < max_candidates and len(parents) >= 2:
@@ -465,6 +600,12 @@ def main() -> None:
                         help=f"Maximum transformations per parent (default from config: {MAX_TRANSFORMS}).")
     parser.add_argument("--query", type=str, default="",
                         help="Original user input query that initiated this factor evolution run.")
+    parser.add_argument("--use-llm", action="store_true",
+                        help="Force LLM-driven transform suggestions (requires --llm-suggestions). Overrides config.")
+    parser.add_argument("--llm-suggestions", type=str, default="",
+                        help="Path to LLM transform suggestions JSON (from llm_suggest.py --apply-response).")
+    parser.add_argument("--no-active-kb", action="store_true",
+                        help="Disable active knowledge base diversity boosts in parent selection.")
     args = parser.parse_args()
 
     diag_path = Path(args.diagnosis)
@@ -480,6 +621,34 @@ def main() -> None:
     diagnosis = json.loads(diag_path.read_text(encoding="utf-8-sig"))
     kb = json.loads(kb_path.read_text(encoding="utf-8-sig"))
 
+    # ── LLM mode: always mandatory ──────────────────────────────────
+    use_llm = True
+
+    # ── Load LLM suggestions ────────────────────────────────────────
+    llm_suggestions = None
+    if use_llm:
+        llm_path = args.llm_suggestions
+        if not llm_path:
+            # Auto-detect: look for transform_suggestions.json in output dir
+            out_dir_guess = Path(args.output).parent if args.output else Path(".")
+            auto_path = out_dir_guess / "transform_suggestions.json"
+            if auto_path.is_file():
+                llm_path = str(auto_path)
+
+        if llm_path and Path(llm_path).is_file():
+            llm_suggestions = json.loads(Path(llm_path).read_text(encoding="utf-8-sig"))
+            print(f"[INFO] Loaded {len(llm_suggestions)} LLM transform suggestions from {llm_path}", file=sys.stderr)
+        elif args.use_llm:
+            # Explicit --use-llm but no file → fatal error
+            print("[ERROR] --use-llm set but no suggestions file found. Run llm_suggest.py first to generate transform_suggestions.json.", file=sys.stderr)
+            sys.exit(1)
+        else:
+            # Config default: LLM preferred but no file yet → fatal error
+            print("[ERROR] LLM transforms are mandatory but no suggestions file found. Run llm_suggest.py first to generate transform_suggestions.json.", file=sys.stderr)
+            sys.exit(1)
+
+    use_active_kb = not args.no_active_kb
+
     candidates = generate_candidates(
         diagnosis, kb,
         max_candidates=args.max_candidates,
@@ -487,10 +656,17 @@ def main() -> None:
         max_parents=args.max_parents,
         min_transforms=args.min_transforms,
         max_transforms=args.max_transforms,
+        llm_suggestions=llm_suggestions,
+        use_active_kb=use_active_kb,
     )
 
     # ── Get the actual mutation parents (same as used by generate_candidates) ─
-    mutation_parents = select_parents(diagnosis, max_parents=args.max_parents)
+    mutation_parents = select_parents(
+        diagnosis,
+        max_parents=args.max_parents,
+        knowledge_base=kb,
+        use_active_kb=use_active_kb,
+    )
     mutation_parent_ids = {p["name"] for p in mutation_parents}
 
     out = args.output if args.output else str(_resolve_output("next_candidates.json"))
@@ -566,6 +742,7 @@ def main() -> None:
             existing_ids.add(cid)
         parent_id = c.get("parent", "")
         transformation = c.get("transformation", "")
+        rationale = c.get("rationale", "")
         if parent_id:
             edge_key = f"{parent_id}__{cid}"
             if not any(e["from"] == parent_id and e["to"] == cid for e in evo["edges"]):
@@ -573,6 +750,7 @@ def main() -> None:
                     "from": parent_id,
                     "to": cid,
                     "transformation": transformation,
+                    "rationale": rationale,
                 })
 
     evo_path.write_text(

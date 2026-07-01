@@ -5,7 +5,9 @@ Install, load, and smoke-test `factor-loop-evolve` across agent runtimes.
 
 **Prerequisites**: PandaData credentials in `.env` and the `panda_data` wheel
 installed. The backtest engine uses real A-share data from PandaData.
-PandaData is mandatory — no synthetic fallback.
+PandaData is the default live-data source. For offline smoke tests or
+reproducible fixtures, `scripts/backtest.py --data <ohlcv.csv>` accepts a local
+CSV with `date,symbol,open,high,low,close,volume,amount` columns.
 
 ---
 
@@ -52,7 +54,7 @@ echo '[{"name":"test_mom","expression":"returns(close,5)","description":"Momentu
 python scripts/validator.py --factors /tmp/smoke_factors.json
 
 # 3. Verify backtest (requires PandaData credentials in .env)
-python scripts/backtest.py --factors /tmp/smoke_factors.json --output /tmp/smoke_bt.json
+python scripts/backtest.py --factors /tmp/smoke_factors.json --data /tmp/smoke_ohlcv.csv --output /tmp/smoke_bt.json
 
 # 4. Verify knowledge base init
 python scripts/knowledge_base.py --init --output /tmp/smoke_kb.json
@@ -89,8 +91,8 @@ Key commands per iteration:
 
 ```bash
 python scripts/validator.py --factors <candidates.json>
-python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json
-python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json
+python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
+python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
 python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
 python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
 ```

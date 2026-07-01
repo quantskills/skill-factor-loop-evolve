@@ -11,13 +11,13 @@
 
 ## 📖 这是什么
 
-`skill-factor-optimize` 是一个面向 AI Agent 的本地闭环因子进化技能。传统因子研究中，研究者需要手动编写因子、逐一回测、人工分析结果、凭经验改进。这个技能将整个过程自动化：
+`skill-factor-loop-evolve` 是一个面向 AI Agent 的本地闭环因子进化技能。传统因子研究中，研究者需要手动编写因子、逐一回测、人工分析结果、凭经验改进。这个技能将整个过程自动化：
 
 1. **验证** — 对每个因子检查语法、字段合法性、前视偏差、数值稳定性，拒绝不合格候选，避免浪费回测资源。
 2. **固定回测** — 使用 PandaData API 获取真实 A 股数据，一致的截面多空回测引擎（可配置股票池、频率、标签、成本），保证迭代间可比。组合收益从调仓日计算，无前视偏差。换手率基于实际持仓变化计算。
 3. **诊断分类** — 计算 IC、ICIR、Sharpe、收益、回撤、换手率、覆盖率、稳定性、多空行为、相关性，按优先级分类：invalid → overfit → unstable → duplicate → weak → promising。
 4. **经验记忆** — 持久化每次迭代的经验：哪些字段有效、哪些模板失败、哪些结构导致高换手、哪些变体相关性过高、哪些改进提升了稳定性。
-5. **可控变体生成** — 选取当前最强因子为父本（按**实际 Sharpe** 排序，最高优先），应用 12 种有明确理由的受控变换。
+5. **可控变体生成** — 选取当前最强因子为父本（按**实际 Sharpe** 排序，最高优先）。**默认使用 LLM 驱动的语义变换**（可在 `config.json` 中关闭，回退到 12 种硬编码变换）。LLM 基于完整诊断档案、经验记忆和用户原始查询提出变换建议。
 6. **迭代循环** — 重复步骤 2–5，直到 N 轮完成、改进停滞或配置的最大迭代次数到达。
 
 **自包含设计** — 无需任何付费 API 密钥。依赖 PandaData（免费）获取真实 A 股数据。
@@ -119,36 +119,44 @@ Agent 提取后生成多种合规变体，如 `zscore(decay_linear(returns(close
 
 | 文件 | 内容 | 如何使用 |
 |------|------|----------|
-| `final_summary.json` | **汇总报告**：优化日志、最佳 5 个因子、是否值得保留、进化图谱、当前配置 | 首先看这个文件，了解整体结果 |
-| `evolution_diagram.md` | **进化图谱**：Mermaid 流程图，每个节点显示公式、5 项指标、彩色标签 | VS Code 中用 `Cmd+Shift+V` 预览，直观看到因子进化路径 |
+| `final_summary.json` | **汇总报告**：优化日志、最佳 5 个因子、Pareto 前沿、是否值得保留、原始查询、进化图谱、当前配置 | 首先看这个文件，了解整体结果 |
+| `evolution_diagram.md` | **进化图谱**：Mermaid 流程图 + 回测配置 + 最佳 10 个因子表 + 变换参考（仅显示实际使用的变换及 LLM 理由） | VS Code 中用 `Cmd+Shift+V` 预览 |
 | `diagnosis.json` | **诊断结果**：每个因子的分类、Sharpe、IC、换手率、改进建议 | 深入了解每个因子的优劣 |
-| `backtest_results.json` | **最后一轮回测**：每个因子的详细回测指标 | 查看收益率序列、IC 序列等底层数据 |
 | `backtest_results_all.json` | **全部回测**：所有迭代轮回测结果的累积 | 对比各轮迭代间的指标变化 |
 | `knowledge_base.json` | **经验记忆**：成功模式、失败模式、字段有效性统计 | 了解什么特征持续有效 |
+| `transform_suggestions.json` | **LLM 变换建议**：LLM 对每个父本提出的具体变换及其理由（LLM 模式下保留） | 了解 LLM 的变换思路 |
+| `candidate_evolution.json` | **完整系谱树**：每个因子的父子关系及每节点指标 | 追踪因子进化路径 |
 | `config.json` | **运行配置**：本次运行使用的完整配置 | 复现运行 |
 
 ---
 
 ## 🧬 进化机制：变换详解
 
-### 受控变换
+### 变换模式
 
-每个父本最多应用 5 种变换，按优先级触发：
+变换模式由 `config.json` 中的 `transformations.use_llm_transforms` 控制：
 
-| 变换 | 触发条件 | 操作 | 理由 |
-|------|----------|------|------|
-| **flip-sign** | Sharpe < −0.3 | 对整个表达式取负 | 负 Sharpe → 反转方向即为正 Sharpe |
-| **reduce-turnover** | 换手率 > 0.8 | 用 `ts_mean()` 包裹因子，平滑信号 | 高换手率 → 降低交易频率 |
-| **adjust-lookback** | 换手率 < 0.3 或 IC 噪音大 | 调整窗口参数（增减约 30–50%） | 信号过于平稳 → 调整灵敏度 |
-| **adjust-smoothing** | 换手率极端（过高/过低） | 改变平滑方式或参数 | 优化信号衰减速度 |
-| **adjust-clipping** | 存在极端离群值 | 添加或调整 sigma clipping | 离群值 → 限制极端值影响 |
-| **adjust-normalization** | 分布偏斜 | 改变归一化方式（zscore/rank/min-max） | 分布问题 → 改善统计特性 |
-| **combine-factors** | 两个因子都 promising 且低相关 | 加权合并两个因子表达式 | 互补信号 → 合并增强 |
-| **simplify** | 表达式过于复杂 | 移除冗余嵌套或成分 | 复杂 → 精简，降低过拟合风险 |
-| **remove-component** | 某成分弱或噪音大 | 移除表达式中的弱成分 | 噪音成分 → 去噪提纯 |
-| **long-only** | 空头端表现差 | 做多信号保留，空头端置零 | 空头无效 → 专注多头 |
-| **short-only** | 多头端表现差 | 做空信号保留，多头端置零 | 多头无效 → 专注空头 |
-| **asymmetric** | 多空收益不对称 | 对多空端施加不同权重 | 不对称 → 优化多空配比 |
+- **`true`（默认）**：使用 LLM 驱动的语义变换。LLM 基于每个父本因子的完整诊断档案（Sharpe、IC、换手率、回撤、多空收益）、经验记忆（成功/失败模式、字段有效性）和用户原始查询，提出 3–5 个语义上有意义的变换。这些不是简单的语法包装（如套一层 `clip()`），而是真正的逻辑改进——组合字段、调整权重、添加互补信号、改变函数族。
+- **`false`**：使用原始的 12 种硬编码变换。
+
+可通过 `--use-llm`（强制 LLM）、`--no-llm`（强制静态）命令行参数覆盖。
+
+### 静态变换参考（LLM 关闭时使用）
+
+| 变换 | 理由 |
+|------|------|
+| `flip-sign` | Sharpe 为负 — 反转表达式符号即可恢复正 Sharpe |
+| `reduce-turnover` | 换手率 > 0.8 — 平滑信号以降低交易频率和成本 |
+| `adjust-lookback` | IC 信号过于嘈杂或过于平滑 — 调整回看窗口可改善稳定性 |
+| `adjust-smoothing` | 换手率极端 — 调整平滑方式以平衡信号衰减与交易成本 |
+| `adjust-clipping` | 极端离群值扭曲信号 — 截尾处理可限制其影响 |
+| `adjust-normalization` | 因子分布偏斜 — 切换归一化方法改善截面可比性 |
+| `combine-factors` | 两个因子均表现良好且相关性低 — 组合可分散 alpha 来源 |
+| `simplify` | 表达式过于复杂 — 移除嵌套可降低过拟合风险 |
+| `remove-component` | 子成分弱或噪音大 — 移除可提纯剩余信号 |
+| `long-only` | 空头端表现差 — 仅保留多头消除无效空头 |
+| `short-only` | 多头端表现差 — 仅保留空头消除无效多头 |
+| `asymmetric` | 多空收益不对称 — 加权捕捉更强的一端 |
 
 ---
 
@@ -182,12 +190,16 @@ Agent:
 2. 将初始候选因子放入 candidates.json
 3. 每轮迭代:
    - 验证: python scripts/validator.py --factors candidates.json
-   - 回测: python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json
-   - 诊断: python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json
+   - 回测: python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
+   - 诊断: python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
    - 学习: python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
-   - 生成: python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
+   - 🆕 LLM 变换（默认启用）:
+     python scripts/llm_suggest.py --generate-prompt ... → 发送给 LLM → 保存响应 →
+     python scripts/llm_suggest.py --apply-response ... → 生成 transform_suggestions.json
+   - 生成: python scripts/generate_candidates.py ... --query "$USER_QUERY"
+     （默认自动检测并使用 LLM 变换建议）
 4. 汇总: python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
-5. 报告: 优化日志、最佳 5 个因子、是否值得保留、关键模式
+5. 报告: 优化日志、最佳 5 个因子、Pareto 前沿、是否值得保留、关键模式
 ```
 
 ### 直接使用
@@ -201,10 +213,14 @@ python scripts/knowledge_base.py --init --output "$FACTOR_OPTIMIZE_RUN_DIR/knowl
 
 # 验证 → 回测 → 诊断 → 学习 → 生成（每轮重复）
 python scripts/validator.py --factors candidates.json
-python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json
-python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json
+python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
+python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
 python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
-python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
+
+# 🆕 LLM 变换（默认，自动检测 transform_suggestions.json；无文件时回退到静态变换）
+python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
+# 或强制使用静态变换:
+python scripts/generate_candidates.py ... --no-llm
 
 # 最终汇总
 python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
@@ -217,7 +233,7 @@ python scripts/optimizer.py --summary --knowledge knowledge_base.json --output f
 ## 📦 目录结构
 
 ```
-skill-factor-optimize/
+skill-factor-loop-evolve/
 ├── SKILL.md                              # 技能入口（YAML 声明 + Agent 指令）
 ├── README.md / README.en.md              # 说明文档
 ├── config.json                           # 所有超参数 + _help 文档
@@ -232,22 +248,23 @@ skill-factor-optimize/
 │   ├── validator.py                      # 🧪 因子验证器（语法、前视偏差、数值稳定性）
 │   ├── backtest.py                       # 📊 回测引擎（PandaData 真实 A 股数据）
 │   ├── diagnose.py                       # 🔍 因子诊断与分类
-│   ├── knowledge_base.py                 # 🧠 经验记忆管理
-│   ├── generate_candidates.py            # 🔀 受控变体生成
-│   └── optimizer.py                      # 🔁 优化循环协调器 + 进化图谱
+│   ├── knowledge_base.py                 # 🧠 经验记忆管理 + 主动学习
+│   ├── generate_candidates.py            # 🔀 变体生成（LLM 优先，静态回退）
+│   ├── llm_suggest.py                    # 🤖 LLM 变换建议引擎
+│   └── optimizer.py                      # 🔁 优化循环协调器 + 进化图谱 + Pareto 前沿
 ├── agents/
 │   ├── openai.yaml                       # OpenAI/Codex 适配
 │   ├── cursor-rule.mdc                   # Cursor 规则适配
 │   └── portable-loader.md                # 通用 Agent 加载器
 └── output/
     └── <run-id>/                         # 每次运行独立子目录
-        ├── backtest_results.json         # 最后一轮回测
         ├── backtest_results_all.json     # 全部迭代回测累积
         ├── diagnosis.json                # 分类 + 指标 + 建议
         ├── knowledge_base.json           # 经验记忆
-        ├── candidate_evolution.json      # 完整系谱树
-        ├── final_summary.json            # 汇总报告
-        ├── evolution_diagram.md          # Mermaid 进化图谱
+        ├── candidate_evolution.json      # 完整系谱树 + 原始查询
+        ├── transform_suggestions.json    # LLM 变换建议（LLM 模式下）
+        ├── final_summary.json            # 汇总报告 + Pareto 前沿
+        ├── evolution_diagram.md          # Mermaid 进化图谱 + 回测配置
         ├── config.json                   # 运行配置（可复现）
         └── trading_data/                 # CSV：收益、IC、持仓
 ```

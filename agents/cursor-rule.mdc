@@ -19,9 +19,9 @@ factor evolution loop, or improve a factor library:
    - Validate:
      `python scripts/validator.py --factors candidates.json`
    - Backtest:
-     `python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results.json`
+     `python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json`
    - Diagnose:
-     `python scripts/diagnose.py --results backtest_results.json --factors validated_factors_passed.json --output diagnosis.json`
+     `python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json`
    - Learn:
      `python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json`
    - Check stopping criteria (stall, max iterations).
