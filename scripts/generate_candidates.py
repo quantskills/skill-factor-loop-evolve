@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from contracts import (  # noqa: E402
     USE_LLM_TRANSFORMS,
     output_path as _resolve_output,
 )
+from llm_suggest import generate_transform_prompt  # noqa: E402
 
 # Try importing active KB functions (graceful fallback if not available)
 try:
@@ -125,6 +127,12 @@ def _select_up_to_n(
 # Transformation Application
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _safe_factor_name(name: str) -> str:
+    """Convert a generated factor name to snake_case."""
+    safe = re.sub(r"[^0-9a-zA-Z_]+", "_", name).strip("_").lower()
+    return safe or "factor"
+
+
 def apply_transformation(
     parent: dict,
     transformation: str,
@@ -148,7 +156,7 @@ def apply_transformation(
     rationale = TRANSFORMATION_RATIONALE_MAP.get(transformation, "Diagnostic-driven improvement")
 
     new_factor = {
-        "name": f"{name}_v{factor_index}_{transformation}",
+        "name": _safe_factor_name(f"{name}_v{factor_index}_{transformation}"),
         "expression": expr,
         "description": f"Variant of {name}: {rationale}",
         "rationale": rationale,
@@ -220,8 +228,6 @@ def _modify_expression(
 
     Returns modified expression or None if no modification needed/possible.
     """
-    import re
-
     if transformation == "adjust-lookback":
         # Try to increase or decrease rolling window parameters by ±50%
         def _adjust_window(match):
@@ -444,7 +450,7 @@ def _apply_single_llm_transform(
     if _normalize_expr(expr) == _normalize_expr(parent_expr):
         return None
 
-    name = suggestion.get("name", f"{parent_name}_llm_variant")
+    name = _safe_factor_name(suggestion.get("name", f"{parent_name}_llm_variant"))
     return {
         "name": name,
         "expression": expr,
@@ -455,6 +461,25 @@ def _apply_single_llm_transform(
         "parent": parent_name,
         "transformation": suggestion.get("transformation", "llm-suggested"),
     }
+
+
+def _write_missing_llm_prompt(
+    diagnosis: dict,
+    knowledge_base: dict,
+    output_dir: Path,
+    query: str,
+    num_parents: int,
+) -> Path:
+    """Write the LLM transform prompt for the agent to complete."""
+    prompt_path = output_dir / "transform_prompt.md"
+    prompt = generate_transform_prompt(
+        diagnosis,
+        knowledge_base,
+        query=query,
+        num_parents=num_parents,
+    )
+    prompt_path.write_text(prompt, encoding="utf-8")
+    return prompt_path
 
 
 def generate_candidates(
@@ -551,7 +576,7 @@ def generate_candidates(
                         break
                 if not too_correlated:
                     candidates.append({
-                        "name": f"{p1['name']}_comb_{p2['name']}",
+                        "name": _safe_factor_name(f"{p1['name']}_comb_{p2['name']}"),
                         "expression": f"zscore({p1.get('expression', '')}) + zscore({p2.get('expression', '')})",
                         "description": f"Combination of {p1['name']} and {p2['name']}",
                         "rationale": "Both promising, low correlation — combined signal",
@@ -602,6 +627,8 @@ def main() -> None:
                         help="Original user input query that initiated this factor evolution run.")
     parser.add_argument("--use-llm", action="store_true",
                         help="Force LLM-driven transform suggestions (requires --llm-suggestions). Overrides config.")
+    parser.add_argument("--no-llm", action="store_true",
+                        help="Force static rule-based transforms, even when config enables LLM transforms.")
     parser.add_argument("--llm-suggestions", type=str, default="",
                         help="Path to LLM transform suggestions JSON (from llm_suggest.py --apply-response).")
     parser.add_argument("--no-active-kb", action="store_true",
@@ -621,8 +648,14 @@ def main() -> None:
     diagnosis = json.loads(diag_path.read_text(encoding="utf-8-sig"))
     kb = json.loads(kb_path.read_text(encoding="utf-8-sig"))
 
-    # ── LLM mode: always mandatory ──────────────────────────────────
-    use_llm = True
+    if args.use_llm and args.no_llm:
+        print(json.dumps({"error": "Use only one of --use-llm or --no-llm."}, ensure_ascii=False))
+        sys.exit(1)
+
+    # LLM is config-driven by default. Static transforms require --no-llm
+    # or config.json transformations.use_llm_transforms=false.
+    use_llm = (args.use_llm or USE_LLM_TRANSFORMS) and not args.no_llm
+    default_output_path = None
 
     # ── Load LLM suggestions ────────────────────────────────────────
     llm_suggestions = None
@@ -630,7 +663,11 @@ def main() -> None:
         llm_path = args.llm_suggestions
         if not llm_path:
             # Auto-detect: look for transform_suggestions.json in output dir
-            out_dir_guess = Path(args.output).parent if args.output else Path(".")
+            if args.output:
+                out_dir_guess = Path(args.output).parent
+            else:
+                default_output_path = _resolve_output("next_candidates.json")
+                out_dir_guess = default_output_path.parent
             auto_path = out_dir_guess / "transform_suggestions.json"
             if auto_path.is_file():
                 llm_path = str(auto_path)
@@ -638,14 +675,30 @@ def main() -> None:
         if llm_path and Path(llm_path).is_file():
             llm_suggestions = json.loads(Path(llm_path).read_text(encoding="utf-8-sig"))
             print(f"[INFO] Loaded {len(llm_suggestions)} LLM transform suggestions from {llm_path}", file=sys.stderr)
-        elif args.use_llm:
-            # Explicit --use-llm but no file → fatal error
-            print("[ERROR] --use-llm set but no suggestions file found. Run llm_suggest.py first to generate transform_suggestions.json.", file=sys.stderr)
-            sys.exit(1)
         else:
-            # Config default: LLM preferred but no file yet → fatal error
-            print("[ERROR] LLM transforms are mandatory but no suggestions file found. Run llm_suggest.py first to generate transform_suggestions.json.", file=sys.stderr)
-            sys.exit(1)
+            prompt_path = _write_missing_llm_prompt(
+                diagnosis,
+                kb,
+                out_dir_guess,
+                query=args.query,
+                num_parents=args.max_parents,
+            )
+            print(json.dumps({
+                "status": "llm_suggestions_required",
+                "message": (
+                    "LLM transforms are enabled. Feed transform_prompt.md to an LLM, "
+                    "save the JSON response, then run llm_suggest.py --apply-response "
+                    "to create transform_suggestions.json before generating candidates."
+                ),
+                "prompt_path": str(prompt_path),
+                "next_steps": [
+                    "Send transform_prompt.md to an LLM and save the raw JSON response as llm_response.json.",
+                    "python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json",
+                    "python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json",
+                ],
+                "static_fallback": "Use --no-llm only when you intentionally want static rule-based transforms.",
+            }, ensure_ascii=False, indent=2))
+            sys.exit(2)
 
     use_active_kb = not args.no_active_kb
 
@@ -669,7 +722,7 @@ def main() -> None:
     )
     mutation_parent_ids = {p["name"] for p in mutation_parents}
 
-    out = args.output if args.output else str(_resolve_output("next_candidates.json"))
+    out = args.output if args.output else str(default_output_path or _resolve_output("next_candidates.json"))
     Path(out).write_text(
         json.dumps(candidates, ensure_ascii=False, indent=2), encoding="utf-8"
     )

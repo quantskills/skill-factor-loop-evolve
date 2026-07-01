@@ -53,7 +53,8 @@ print('Contracts OK')
 echo '[{"name":"test_mom","expression":"returns(close,5)","description":"Momentum","rationale":"Test","generation":"initial"}]' > /tmp/smoke_factors.json
 python scripts/validator.py --factors /tmp/smoke_factors.json
 
-# 3. Verify backtest (requires PandaData credentials in .env)
+# 3. Verify backtest with a local fixture CSV
+python -c "import sys; sys.path.insert(0, 'scripts'); from backtest import make_synthetic_market_data; make_synthetic_market_data(num_dates=300, num_symbols=30).to_csv('/tmp/smoke_ohlcv.csv', index=False)"
 python scripts/backtest.py --factors /tmp/smoke_factors.json --data /tmp/smoke_ohlcv.csv --output /tmp/smoke_bt.json
 
 # 4. Verify knowledge base init
@@ -63,7 +64,7 @@ python -c "import json; kb=json.load(open('/tmp/smoke_kb.json')); assert kb['ver
 # 5. Verify full pipeline (diagnose → generate → learn → summary)
 python scripts/diagnose.py --results /tmp/smoke_bt.json --factors /tmp/smoke_factors.json --output /tmp/smoke_diag.json
 python scripts/knowledge_base.py --learn /tmp/smoke_diag.json --knowledge /tmp/smoke_kb.json --output /tmp/smoke_kb2.json
-python scripts/generate_candidates.py --diagnosis /tmp/smoke_diag.json --knowledge /tmp/smoke_kb2.json --output /tmp/smoke_next.json
+python scripts/generate_candidates.py --diagnosis /tmp/smoke_diag.json --knowledge /tmp/smoke_kb2.json --output /tmp/smoke_next.json --no-llm
 python scripts/optimizer.py --summary --knowledge /tmp/smoke_kb2.json --output /tmp/smoke_summary.json
 python -c "import json; s=json.load(open('/tmp/smoke_summary.json')); print(f'Summary: {s[\"iterations\"]} iterations')"
 ```
@@ -94,6 +95,9 @@ python scripts/validator.py --factors <candidates.json>
 python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
 python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
 python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
+python scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md
+# Feed transform_prompt.md to an LLM, save JSON as llm_response.json, then:
+python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json
 python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
 ```
 

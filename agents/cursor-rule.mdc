@@ -25,7 +25,11 @@ factor evolution loop, or improve a factor library:
    - Learn:
      `python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json`
    - Check stopping criteria (stall, max iterations).
-   - Generate next batch:
+   - Generate LLM suggestions first:
+     `python scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md`
+     Feed `transform_prompt.md` to an LLM, save JSON as `llm_response.json`, then:
+     `python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json`
+   - Generate next batch from LLM suggestions:
      `python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json`
      Then validate next_candidates.json for the next loop.
 8. After all iterations:

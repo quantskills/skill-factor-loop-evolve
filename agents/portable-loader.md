@@ -29,7 +29,11 @@ pipeline, or improve a factor library through closed-loop research:
    d. Learn:
       python <<SKILL_ROOT>>/scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
    e. Check stopping criteria (stall, max iterations).
-   f. Generate next batch:
+   f. Generate LLM suggestions first:
+      python <<SKILL_ROOT>>/scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md
+      Feed transform_prompt.md to an LLM, save JSON as llm_response.json, then:
+      python <<SKILL_ROOT>>/scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json
+   g. Generate next batch from LLM suggestions:
       python <<SKILL_ROOT>>/scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
       Then validate next_candidates.json for the next loop.
 8. After all iterations:

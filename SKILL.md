@@ -133,9 +133,11 @@ This skill provides:
 9. **Generate next batch** — `python scripts/generate_candidates.py ...`
    Parent selection: sorts by actual Sharpe (highest first), skips correlated duplicates
    (relaxing threshold from 0.7 → 0.85 → 0.95 to guarantee 3 parents), selects exactly 3.
-   **By default, uses LLM-driven semantic transforms** (auto-detects `transform_suggestions.json`;
-   falls back to hard-coded transforms if not available). Controlled by `transformations.use_llm_transforms`
-   in `config.json` (`true` = LLM priority, `false` = static transforms only).
+   **By default, uses LLM-driven semantic transforms**. First run
+   `llm_suggest.py --generate-prompt`, feed the prompt to an LLM, apply the
+   response into `transform_suggestions.json`, then run `generate_candidates.py`.
+   Controlled by `transformations.use_llm_transforms` in `config.json`
+   (`true` = LLM priority, `false` = static transforms only).
    Override with `--use-llm` (force LLM), `--no-llm` (force static), or `--no-active-kb` (disable diversity boosts).
    Then validate and go to step 5.
 10. **Final report** — `python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json`
@@ -263,22 +265,17 @@ python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_ba
 
 # Generate next candidates → next_candidates.json (intermediate)
 # 🆕 LLM-driven transformations are the DEFAULT (config: use_llm_transforms=true)
-# Auto-detects transform_suggestions.json; falls back to static transforms if not found.
+# Auto-detects transform_suggestions.json. If missing, generate_candidates.py
+# writes transform_prompt.md and stops; use --no-llm only for intentional static fallback.
 
-# Default — LLM priority (auto-detects suggestions, graceful fallback):
+# LLM pipeline (default):
+python scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md
+# Feed transform_prompt.md to LLM → save response as llm_response.json
+python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json
 python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
 
 # Force static (hard-coded) transforms only:
 python scripts/generate_candidates.py ... --no-llm
-
-# LLM pipeline (agent orchestrates the LLM call before generating):
-# Step 1: Generate LLM prompt
-python scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md
-# Step 2: Feed transform_prompt.md to LLM → save response as llm_response.json
-# Step 3: Apply LLM response
-python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json
-# Step 4: Generate with LLM suggestions (auto-detected when config.use_llm_transforms=true)
-python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json --query "$USER_QUERY"
 
 # 🆕 Disable active KB if desired:
 python scripts/generate_candidates.py ... --no-active-kb
@@ -287,8 +284,75 @@ python scripts/generate_candidates.py ... --no-active-kb
 python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
 ```
 
-All paths are relative to the output run directory. ``FACTOR_OPTIMIZE_RUN_DIR``
-must be set for pipeline continuity across script calls.
+Use full paths under ``FACTOR_OPTIMIZE_RUN_DIR`` for explicit ``--output`` and
+input arguments, or omit ``--output`` to let scripts write to the run directory.
+Bare filenames are resolved relative to the current working directory.
+``FACTOR_OPTIMIZE_RUN_DIR`` must be set for pipeline continuity across script calls.
+
+## Execution Details For Agents
+
+### Run Directory Discipline
+
+Set one run directory and pass full paths between scripts:
+
+```bash
+export FACTOR_OPTIMIZE_RUN_DIR="output/run_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$FACTOR_OPTIMIZE_RUN_DIR"
+```
+
+Bare filenames are resolved from the current working directory. For reliable
+multi-script runs, use paths under `$FACTOR_OPTIMIZE_RUN_DIR`.
+
+### LLM Priority
+
+`generate_candidates.py` defaults to LLM mode when
+`config.json -> transformations.use_llm_transforms` is true.
+
+If `transform_suggestions.json` is missing, `generate_candidates.py` writes
+`transform_prompt.md` and exits with status `2`. Complete the LLM step, then
+run `generate_candidates.py` again.
+
+Use static transforms only when the user explicitly asks for static mode:
+
+```bash
+python scripts/generate_candidates.py ... --no-llm
+```
+
+### Local CSV Backtest
+
+For offline fixtures:
+
+```bash
+python scripts/backtest.py \
+  --factors "$FACTOR_OPTIMIZE_RUN_DIR/validated_factors_passed.json" \
+  --data /path/to/ohlcv.csv \
+  --output "$FACTOR_OPTIMIZE_RUN_DIR/backtest_results_all.json"
+```
+
+The CSV must contain:
+
+```text
+date,symbol,open,high,low,close,volume,amount
+```
+
+### Output Reading Order
+
+1. `final_summary.json`
+2. `evolution_diagram.md`
+3. `diagnosis.json`
+4. `backtest_results_all.json`
+5. `knowledge_base.json`
+
+Intermediate files such as `validated_factors_passed.json`,
+`next_candidates.json`, `transform_prompt.md`, and `llm_response.json` are
+cleaned by the final summary step.
+
+### Verification After Code Changes
+
+```bash
+python3 -m py_compile scripts/*.py
+git diff --check
+```
 
 ## Agent Prompt Template
 
@@ -311,7 +375,11 @@ pipeline (factor-loop-evolve). You will iterate for {N} rounds.
 3. Diagnose: python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json
 4. Learn: python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json
 5. Check stopping: if best Sharpe unchanged for {stall} iterations or {max} iterations reached → stop
-6. Generate: python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
+6. Generate LLM suggestions first, then candidates:
+   python scripts/llm_suggest.py --generate-prompt --diagnosis diagnosis.json --knowledge knowledge_base.json --query "$USER_QUERY" --output transform_prompt.md
+   Feed transform_prompt.md to LLM and save JSON as llm_response.json.
+   python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json
+   python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
    Then validate next_candidates.json for the next loop.
 
 ## After All Iterations
@@ -330,91 +398,6 @@ pipeline (factor-loop-evolve). You will iterate for {N} rounds.
 - Cursor: use `agents/cursor-rule.mdc`.
 - Hermes / OpenClaw: use `agents/portable-loader.md`.
 - OpenAI-style: read `agents/openai.yaml`.
-
-## Example Run: Momentum Factor Evolution on CSI 300
-
-This is a **concrete, copy-pasteable** example showing a full 3-iteration
-run evolving momentum factors.
-
-### User Request
-
-```
-帮我优化动量因子，跑3轮迭代。从经典的动量公式出发，每轮诊断后自动生成改进变体。
-```
-
-### Quick Run Script
-
-```bash
-cd skill-factor-loop-evolve
-export FACTOR_OPTIMIZE_RUN_DIR="output/run_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$FACTOR_OPTIMIZE_RUN_DIR"
-
-# Embedded candidates (sample momentum factors)
-python -c "
-import json
-candidates = [
-    {'name':'simple_mom_5d','expression':'returns(close,5)','description':'5-day momentum','rationale':'Short-term trend','generation':'initial'},
-    {'name':'simple_mom_20d','expression':'returns(close,20)','description':'20-day momentum','rationale':'Medium-term trend','generation':'initial'},
-    {'name':'risk_adj_mom_10d','expression':'returns(close,10)/max(ts_std(returns(close,1),20),1e-8)','description':'Risk-adj 10d','rationale':'Risk-adjusted','generation':'initial'},
-]
-with open('$FACTOR_OPTIMIZE_RUN_DIR/candidates.json','w') as f: json.dump(candidates, f)
-"
-
-KB="$FACTOR_OPTIMIZE_RUN_DIR/knowledge_base.json"
-python scripts/knowledge_base.py --init --output "$KB"
-python scripts/validator.py --factors "$FACTOR_OPTIMIZE_RUN_DIR/candidates.json"
-
-for it in 1 2 3; do
-    python scripts/backtest.py --factors "$FACTOR_OPTIMIZE_RUN_DIR/validated_factors_passed.json" \
-        --output "$FACTOR_OPTIMIZE_RUN_DIR/backtest_results_all.json"
-    python scripts/diagnose.py --results "$FACTOR_OPTIMIZE_RUN_DIR/backtest_results_all.json" \
-        --factors "$FACTOR_OPTIMIZE_RUN_DIR/validated_factors_passed.json" \
-        --output "$FACTOR_OPTIMIZE_RUN_DIR/diagnosis.json"
-    python scripts/knowledge_base.py --learn "$FACTOR_OPTIMIZE_RUN_DIR/diagnosis.json" --knowledge "$KB"
-    if [ $it -lt 3 ]; then
-        python scripts/generate_candidates.py --diagnosis "$FACTOR_OPTIMIZE_RUN_DIR/diagnosis.json" \
-            --knowledge "$KB" --output "$FACTOR_OPTIMIZE_RUN_DIR/next_candidates.json"
-        python scripts/validator.py --factors "$FACTOR_OPTIMIZE_RUN_DIR/next_candidates.json"
-    fi
-done
-
-python scripts/optimizer.py --summary --knowledge "$KB" --output "$FACTOR_OPTIMIZE_RUN_DIR/final_summary.json"
-```
-
-### Expected Timeline
-
-| Phase | Approx. Time |
-|-------|--------------|
-| Validation | < 1 second |
-| Backtest (PandaData, 300 stocks × 2 years) | 30–120 seconds per iteration |
-| Diagnosis + Learn + Generate | < 5 seconds per iteration |
-| **Total for 3 iterations** | **~5 minutes** |
-
-### Reading the Results
-
-```bash
-# View Sharpe progression
-python -c "
-import json
-fs = json.load(open('$FACTOR_OPTIMIZE_RUN_DIR/final_summary.json'))
-for l in fs['optimization_log']:
-    print(f\"Iter {l['iteration']}: {l['best_sharpe']:.2f} ({l['best_factor']})\")
-"
-
-# View top factors
-python -c "
-import json
-fs = json.load(open('$FACTOR_OPTIMIZE_RUN_DIR/final_summary.json'))
-for f in fs['best_factors']:
-    print(f\"{f['name']}: S={f['sharpe']:.2f} IC={f['ic_mean']:.3f} TO={f['turnover']:.2f}\")
-"
-
-# Check if worth keeping
-python -c "
-import json
-print(json.load(open('$FACTOR_OPTIMIZE_RUN_DIR/final_summary.json'))['worth_keeping'])
-"
-```
 
 ## Setup
 

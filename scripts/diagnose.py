@@ -29,6 +29,21 @@ from contracts import (  # noqa: E402
 )
 
 
+def _spearman_corr(x: np.ndarray, y: np.ndarray) -> float:
+    """Compute Spearman correlation without requiring scipy."""
+    def _rank(values: np.ndarray) -> np.ndarray:
+        order = np.argsort(values, kind="mergesort")
+        ranks = np.empty(len(values), dtype=float)
+        ranks[order] = np.arange(len(values), dtype=float)
+        return ranks
+
+    rx = _rank(x)
+    ry = _rank(y)
+    if np.std(rx) == 0 or np.std(ry) == 0:
+        return 0.0
+    return float(np.corrcoef(rx, ry)[0, 1])
+
+
 def compute_correlation_between_factors(
     results: list[dict],
 ) -> dict[str, float]:
@@ -63,9 +78,8 @@ def compute_correlation_between_factors(
                 # Align to minimum length
                 min_len = min(len(ic1), len(ic2))
                 if min_len >= 5:
-                    from scipy.stats import spearmanr as _spearmanr
                     try:
-                        corr_val, _ = _spearmanr(ic1[:min_len], ic2[:min_len])
+                        corr_val = _spearman_corr(ic1[:min_len], ic2[:min_len])
                         cors[key] = round(float(corr_val), 4) if not np.isnan(corr_val) else 0.0
                     except Exception:
                         cors[key] = 0.0
@@ -142,11 +156,11 @@ def classify_factor(
             abs(icir) < CLASSIFICATION_CRITERIA["weak"]["icir_max"]):
         return "weak"
 
-    # Promising check — strong predictive power (positive Sharpe is good)
-    # Turnover is NOT a gate for promising — it's a cost concern, not predictive.
+    # Promising check — strong predictive power with acceptable trading cost.
     if (abs(ic_mean) >= CLASSIFICATION_CRITERIA["promising"]["ic_min"] and
             abs(icir) >= CLASSIFICATION_CRITERIA["promising"]["icir_min"] and
             sharpe >= CLASSIFICATION_CRITERIA["promising"]["sharpe_min"] and
+            turnover <= CLASSIFICATION_CRITERIA["promising"]["turnover_max"] and
             coverage >= CLASSIFICATION_CRITERIA["promising"]["coverage_min"]):
         return "promising"
 

@@ -312,38 +312,45 @@ def _check_fields(expression: str) -> list[str]:
 def _check_lookahead(expression: str) -> list[str]:
     """Check for look-ahead bias. Returns list of violations."""
     violations = []
-    # delay(x, 0) or delay(x, -1)
-    delay_matches = re.findall(r'delay\s*\([^,]+,\s*(-?\d+)', expression)
-    for n_str in delay_matches:
-        n = int(n_str)
-        if n <= 0:
-            violations.append(
-                f"Look-ahead bias: delay(..., {n}) uses n <= 0"
-            )
 
-    # delta(x, 0) or delta(x, -1)
-    delta_matches = re.findall(r'delta\s*\([^,]+,\s*(-?\d+)', expression)
-    for n_str in delta_matches:
-        n = int(n_str)
-        if n <= 0:
-            violations.append(
-                f"Look-ahead bias: delta(..., {n}) uses n <= 0"
-            )
+    def _func_name(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        return None
 
-    # returns(x, 0) or returns(x, -1) — note returns can have 1 or 2 args
-    returns_matches = re.findall(r'returns\s*\([^)]+\)', expression)
-    for match in returns_matches:
-        args = match[match.index('(') + 1:match.rindex(')')]
-        parts = [p.strip() for p in args.split(',')]
-        if len(parts) >= 2:
-            try:
-                n = int(parts[1])
-                if n <= 0:
-                    violations.append(
-                        f"Look-ahead bias: returns(..., {n}) uses n <= 0"
-                    )
-            except ValueError:
-                pass
+    def _literal_int(node: ast.AST) -> int | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return node.value
+        if (
+            isinstance(node, ast.UnaryOp)
+            and isinstance(node.op, ast.USub)
+            and isinstance(node.operand, ast.Constant)
+            and isinstance(node.operand.value, int)
+        ):
+            return -node.operand.value
+        return None
+
+    try:
+        tree = ast.parse(expression)
+    except SyntaxError:
+        return violations
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = _func_name(node.func)
+        if func in {"delay", "delta"} and len(node.args) >= 2:
+            n = _literal_int(node.args[1])
+            if n is not None and n <= 0:
+                violations.append(
+                    f"Look-ahead bias: {func}(..., {n}) uses n <= 0"
+                )
+        elif func == "returns" and len(node.args) >= 2:
+            n = _literal_int(node.args[1])
+            if n is not None and n <= 0:
+                violations.append(
+                    f"Look-ahead bias: returns(..., {n}) uses n <= 0"
+                )
 
     return violations
 
@@ -430,7 +437,7 @@ def _check_rolling_params(expression: str) -> list[str]:
             for arg in args:
                 try:
                     val = int(arg)
-                    if val < MIN_ROLLING_N and func not in ('returns',):
+                    if val < MIN_ROLLING_N and func not in ('delay', 'delta', 'returns'):
                         warnings_list.append(
                             f"Small window: {func}(..., {val}) — n < {MIN_ROLLING_N}"
                         )
@@ -565,7 +572,7 @@ def validate_factors(factors: list[dict]) -> dict:
         "total": len(factors),
         "passed": passed_count,
         "failed": failed_count,
-        "toy_data_shape": [30, 5],
+        "toy_data_shape": list(toy_data.shape),
         "results": results,
     }
 

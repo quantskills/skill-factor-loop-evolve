@@ -371,11 +371,10 @@ class FixedBacktestEngine:
         if len(rebalance_dates) < 10:
             return {"error": f"Too few rebalance dates: {len(rebalance_dates)}"}
 
-        # Number of stocks for long/short legs
+        # Number of stocks for long/short legs.
         n_stocks = len(common_symbols)
         n_long = max(1, int(n_stocks * self.long_pct))
         n_short = max(1, int(n_stocks * self.short_pct))
-        n_quantiles = max(n_long, n_short, 3)  # ensure enough buckets
 
         portfolio_returns = []
         long_returns_list = []
@@ -387,17 +386,12 @@ class FixedBacktestEngine:
 
         for i, date in enumerate(rebalance_dates[:-1]):
             scores = fv.loc[date].dropna()
-            if len(scores) < n_quantiles * 2:
+            if len(scores) < n_long + n_short:
                 continue
 
-            try:
-                quantiles = pd.qcut(scores, n_quantiles, labels=False, duplicates="drop")
-            except ValueError:
-                continue
-
-            top_mask = quantiles == quantiles.max()
-            bottom_mask = quantiles == quantiles.min()
-            if top_mask.sum() == 0 or bottom_mask.sum() == 0:
+            top_scores = scores.nlargest(n_long)
+            bottom_scores = scores.nsmallest(n_short)
+            if top_scores.empty or bottom_scores.empty:
                 continue
 
             # Use the forward return from the rebalance date itself (no look-ahead)
@@ -414,10 +408,10 @@ class FixedBacktestEngine:
                 continue
 
             # Long leg: top stocks
-            long_symbols = set(scores[top_mask].index)
+            long_symbols = set(top_scores.index)
             long_ret = fwd_ret[list(long_symbols & set(fwd_ret.index))].mean()
             # Short leg: bottom stocks (we profit when they go down)
-            short_symbols = set(scores[bottom_mask].index)
+            short_symbols = set(bottom_scores.index)
             short_ret = fwd_ret[list(short_symbols & set(fwd_ret.index))].mean()
             # Long-short spread minus costs (cost on both legs)
             cost = self.cost_bps / 10000 * 4  # round-trip × 2 legs
@@ -438,16 +432,12 @@ class FixedBacktestEngine:
             prev_short_symbols = short_symbols
 
             # Log positions
-            top_symbols = scores[top_mask].index.tolist()
-            top_scores = scores[top_mask].tolist()
-            bottom_symbols = scores[bottom_mask].index.tolist()
-            bottom_scores = scores[bottom_mask].tolist()
             positions_log.append({
                 "date": str(date),
-                "long_symbols": top_symbols[:20],
-                "long_scores": [round(s, 6) for s in top_scores[:20]],
-                "short_symbols": bottom_symbols[:20],
-                "short_scores": [round(s, 6) for s in bottom_scores[:20]],
+                "long_symbols": top_scores.index.tolist()[:20],
+                "long_scores": [round(s, 6) for s in top_scores.tolist()[:20]],
+                "short_symbols": bottom_scores.index.tolist()[:20],
+                "short_scores": [round(s, 6) for s in bottom_scores.tolist()[:20]],
             })
 
         if len(portfolio_returns) < 10:
@@ -627,6 +617,8 @@ def main() -> None:
                         help="Fraction of stocks to go long (default from config).")
     parser.add_argument("--short-pct", type=float, default=DEFAULT_BACKTEST_CONFIG.get("short_pct", 0.2),
                         help="Fraction of stocks to go short (default from config).")
+    parser.add_argument("--lookback-min-days", type=int, default=DEFAULT_BACKTEST_CONFIG.get("lookback_min_days", 252),
+                        help="Minimum common dates required for a backtest (default from config).")
     args = parser.parse_args()
 
     factors_path = Path(args.factors)
@@ -640,9 +632,13 @@ def main() -> None:
         sys.exit(1)
 
     # Load data: CSV file or PandaData
-    if args.data and Path(args.data).is_file():
-        data = pd.read_csv(args.data)
-        data_source = "csv"
+    if args.data:
+        data_path = Path(args.data)
+        if not data_path.is_file():
+            print(json.dumps({"error": f"CSV data file not found: {args.data}"}, ensure_ascii=False))
+            sys.exit(1)
+        data = pd.read_csv(data_path)
+        data_source = f"csv ({data_path})"
     else:
         data = fetch_market_data_from_pandadata(
             start_date=args.start_date,
@@ -669,6 +665,7 @@ def main() -> None:
         n_quantiles=args.n_quantiles,
         long_pct=args.long_pct,
         short_pct=args.short_pct,
+        lookback_min=args.lookback_min_days,
     )
 
     close_pivot = data.pivot_table(
@@ -697,7 +694,7 @@ def main() -> None:
     # ── Determine current iteration from accumulated results ──────────
     # The backtest_results_all.json tracks completed iterations.
     # Current iteration = (# completed iterations) + 1.
-    all_bt_path = out_dir / "backtest_results_all.json"
+    all_bt_path = Path(top_out)
     if all_bt_path.is_file():
         try:
             all_prev = json.loads(all_bt_path.read_text(encoding="utf-8-sig"))
@@ -821,6 +818,7 @@ def main() -> None:
             "n_quantiles": args.n_quantiles,
             "long_pct": args.long_pct,
             "short_pct": args.short_pct,
+            "lookback_min_days": args.lookback_min_days,
             "data_source": data_source,
             "start_date": args.start_date,
             "end_date": args.end_date,

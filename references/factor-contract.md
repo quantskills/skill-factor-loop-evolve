@@ -32,7 +32,7 @@ Each field is a `date × symbol` DataFrame (OHLCV market data):
 | ----------------- | ---------------------------------------------- |
 | `rank(x)`         | Cross-sectional percentile rank at each date (0–1) |
 | `zscore(x)`       | Cross-sectional z-score at each date           |
-| `scale(x, a=1)`   | Cross-sectional rescaling so |sum| == a       |
+| `scale(x, a=1)`   | Cross-sectional rescaling so `sum(abs(x)) == a` |
 
 ### 2.2 Time-Series Rolling
 
