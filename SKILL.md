@@ -3,7 +3,9 @@ name: factor-loop-evolve
 description: >-
   Closed-loop factor evolution system: validate, backtest, diagnose,
   learn, generate variants, repeat for N iterations. Factors evolve
-  through controlled transformations toward higher Sharpe.
+  through controlled transformations toward higher Sharpe. Use when
+  iteratively optimizing alpha factors from candidate expressions and
+  trading/backtest diagnostics.
 license: GPL-3.0-only
 quantSkills:
   organization: QuantSkills
@@ -72,12 +74,13 @@ This skill provides:
   which templates failed, which errors recurred, which structures caused
   high turnover, which variants were too correlated, and which refinements
   improved stability.
-- A **variant generator** — selects the strongest current factors as parents
-  by **actual Sharpe** (highest first, no abs). By default uses **LLM-driven
-  semantic transformations** (configurable via `use_llm_transforms`); falls
-  back to 12 hard-coded transformations when disabled. LLM-proposed transforms
-  are based on full diagnostic profiles, knowledge base insights, and the
-  original user query.
+- A **variant generator** — selects high-quality, diverse parents using a
+  parent score where actual Sharpe remains dominant, with small IC/ICIR and
+  classification tie-breakers plus turnover/drawdown penalties. By default
+  uses **LLM-driven semantic transformations** (configurable via
+  `use_llm_transforms`); falls back to 12 hard-coded transformations when
+  disabled. LLM-proposed transforms are based on full diagnostic profiles,
+  knowledge base insights, and the original user query.
 - An **optimization loop coordinator** — manages N iterations, updates
   experience after each iteration, stops when improvement stalls.
 - 🆕 **LLM-driven transformation engine** (`scripts/llm_suggest.py`) —
@@ -126,16 +129,24 @@ This skill provides:
    Uses PandaData API (CSI 300, 2024-2025 by default), unless `--data <ohlcv.csv>`
    is supplied. Configurable via `config.json`.
 6. **Diagnose** — `python scripts/diagnose.py --results backtest_results_all.json --factors validated_factors_passed.json --output diagnosis.json`
-   Classifies each factor. Output is flattened (sharpe, ic_mean, turnover directly, no nested metrics dict).
+   Classifies each factor. Output is flattened: `sharpe`, `annual_return`,
+   `max_drawdown`, `ic_mean`, `ic_std`, `icir`, `turnover`, `coverage`,
+   `long_return`, and `short_return` are directly on each diagnostic entry.
 7. **Learn** — `python scripts/knowledge_base.py --learn diagnosis.json --knowledge knowledge_base.json`
    Updates experience memory with successful patterns and lessons.
 8. **Check stopping** — if Sharpe unchanged for 2 iterations or max iterations reached, go to step 10.
 9. **Generate next batch** — `python scripts/generate_candidates.py ...`
-   Parent selection: sorts by actual Sharpe (highest first), skips correlated duplicates
-   (relaxing threshold from 0.7 → 0.85 → 0.95 to guarantee 3 parents), selects exactly 3.
+   Parent selection: ranks valid, non-invalid factors by parent score; actual
+   Sharpe dominates, while IC/ICIR, classification, turnover, drawdown,
+   active-KB diversity boosts, and pairwise IC correlation are used as
+   tie-breakers and risk controls. Defaults: choose up to 3 parents, keep at
+   least 2 when available.
    **By default, uses LLM-driven semantic transforms**. First run
    `llm_suggest.py --generate-prompt`, feed the prompt to an LLM, apply the
    response into `transform_suggestions.json`, then run `generate_candidates.py`.
+   The suggestion file keeps all iterations in `suggestion_history[]`; each
+   entry and suggestion records the completed diagnosis iteration it refers to
+   and the next candidate iteration it targets.
    Controlled by `transformations.use_llm_transforms` in `config.json`
    (`true` = LLM priority, `false` = static transforms only).
    Override with `--use-llm` (force LLM), `--no-llm` (force static), or `--no-active-kb` (disable diversity boosts).
@@ -159,7 +170,7 @@ after the run. The skill root stays clean (only `config.json` and `.env`).
 | `final_summary.json` | Optimization log, top 5 factors, Pareto frontier, worth_keeping, original query, active config, evolution diagram |
 | `config.json` | Full config used for this run (reproducibility) |
 | `evolution_diagram.md` | Mermaid graph + original query + top-10 table + Pareto frontier (open with Cmd+Shift+V) |
-| `transform_suggestions.json` | 🆕 LLM-suggested transforms (kept if `--use-llm` enabled) |
+| `transform_suggestions.json` | 🆕 LLM-suggested transforms with all iteration history (kept if LLM enabled) |
 | `trading_data/` | CSV: portfolio returns, IC series, positions |
 
 `transform_prompt.md` and `llm_response.json` are intermediate and cleaned after the run.
@@ -183,7 +194,8 @@ Read `final_summary.json` first for the high-level picture:
 
 For detail, read `diagnosis.json`:
 - `diagnostics[]`: per-factor entry with `name`, `expression`, `classification`,
-  `sharpe`, `ic_mean`, `turnover`, `diagnosis_notes`, `improvement_suggestions`.
+  flattened performance/risk metrics, `diagnosis_notes`, and
+  `improvement_suggestions`.
 - `best_factor`, `best_sharpe`: best of this iteration.
 - `n_promising`, `n_weak`, etc.: classification counts.
 - `correlations`: pairwise IC correlations between factors.
@@ -209,10 +221,31 @@ For cross-iteration trend, read `backtest_results_all.json`:
 
 ### Parent Selection Rule
 
-Sort by actual Sharpe (highest first), skip correlated duplicates using
-progressively relaxed thresholds (0.7 → 0.85 → 0.95) to guarantee exactly
-3 parents are selected (or as many valid factors as exist). No classification
-filtering — ALL factors with valid Sharpe are eligible.
+Eligible parents must have a numeric Sharpe and must not be classified as
+`invalid`.
+
+The selector computes `_parent_score`:
+
+- Actual Sharpe is the dominant base score.
+- Active knowledge-base boosts can adjust the base for field diversity and
+  repeated failed-pattern avoidance.
+- Small bonuses reward `promising` classification, stronger absolute IC, and
+  stronger absolute ICIR.
+- Penalties reduce priority for high turnover, deep drawdown, `unstable`,
+  `duplicate`, or `overfit` classifications.
+
+The selector then chooses a diverse parent set:
+
+- Prefer pairwise absolute IC correlation ≤ `duplicate_correlation_threshold`
+  (default 0.7).
+- Return up to `max_parents` (default 3).
+- Preserve at least `min_parents` (default 2) when enough candidates exist by
+  relaxing the threshold to 0.85 then 0.95.
+- Only add a highly correlated parent as a last resort to satisfy
+  `min_parents`.
+
+The same selector is used by `llm_suggest.py` when building the LLM prompt and
+by `generate_candidates.py` when creating the next batch.
 
 ## Transformation Reference
 
@@ -237,10 +270,10 @@ The 12 controlled transformations and the rationale behind each:
 factors can become positive before further refinement.
 5 transformations per parent (fixed).
 
-`combine-factors` is applied as a **fallback** when fewer than
-`max_candidates` candidates are generated from per-parent transforms — it
-merges two low-correlation parents. `remove-component` is not yet implemented
-(always returns None).
+In static mode, `combine-factors` is applied as a **fallback** when fewer than
+`max_candidates` candidates are generated from per-parent transforms; it merges
+two low-correlation parents. LLM mode uses only LLM-proposed transforms.
+`remove-component` is not yet implemented (always returns None).
 
 ## Calling Pattern
 
@@ -311,6 +344,31 @@ multi-script runs, use paths under `$FACTOR_OPTIMIZE_RUN_DIR`.
 If `transform_suggestions.json` is missing, `generate_candidates.py` writes
 `transform_prompt.md` and exits with status `2`. Complete the LLM step, then
 run `generate_candidates.py` again.
+
+`transform_suggestions.json` uses this history shape:
+
+```json
+{
+  "version": 2,
+  "latest_iteration": 3,
+  "latest_suggestions": [],
+  "suggestion_history": [
+    {
+      "iteration": 3,
+      "refers_to": {
+        "diagnosis_iteration": 3,
+        "candidate_iteration": 4
+      },
+      "n_suggestions": 0,
+      "suggestions": []
+    }
+  ]
+}
+```
+
+Each suggestion also has `source_iteration`, `target_iteration`, and
+`refers_to`. `generate_candidates.py` reads `latest_suggestions` and still
+accepts the old list-only format for older runs.
 
 Use static transforms only when the user explicitly asks for static mode:
 

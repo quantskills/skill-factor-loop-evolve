@@ -35,92 +35,7 @@ from contracts import (  # noqa: E402
     output_path as _resolve_output,
 )
 from llm_suggest import generate_transform_prompt  # noqa: E402
-
-# Try importing active KB functions (graceful fallback if not available)
-try:
-    from knowledge_base import (  # noqa: E402
-        get_parent_diversity_boost,
-    )
-    _HAS_ACTIVE_KB = True
-except ImportError:
-    _HAS_ACTIVE_KB = False
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Parent Selection
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def select_parents(
-    diagnosis: dict,
-    max_parents: int = 3,
-    knowledge_base: dict | None = None,
-    use_active_kb: bool = True,
-) -> list[dict]:
-    """Select exactly max_parents factors as parents (or as many valid as exist).
-
-    Sort by actual Sharpe (highest first), skip duplicates using progressively
-    relaxed correlation thresholds (0.7 → 0.85 → 0.95 → no filter) to guarantee
-    the target count is reached.
-
-    When ``use_active_kb`` is True and ``knowledge_base`` is provided,
-    applies diversity boosts: factors using underexplored fields get a
-    small bonus, factors similar to failed patterns get a penalty.
-
-    No classification filtering. No abs(). Higher Sharpe = better parent.
-    """
-    diagnostics = diagnosis.get("diagnostics", [])
-
-    # Filter out factors that failed backtest (no valid Sharpe)
-    valid = [d for d in diagnostics if d.get("sharpe") is not None]
-
-    # Sort by actual Sharpe — highest first
-    valid.sort(key=lambda d: d.get("sharpe") or 0, reverse=True)
-
-    # ── Active KB: apply diversity boosts ────────────────────────────
-    if use_active_kb and _HAS_ACTIVE_KB and knowledge_base:
-        valid = get_parent_diversity_boost(valid, knowledge_base)
-        # Re-sort by effective Sharpe (base + boost)
-        valid.sort(key=lambda d: d.get("_effective_sharpe", d.get("sharpe") or 0), reverse=True)
-
-    # Select parents, guaranteeing max_parents (or as many valid factors as exist)
-    selected = _select_up_to_n(valid, diagnosis, max_parents)
-
-    return selected
-
-
-def _select_up_to_n(
-    candidates: list[dict],
-    diagnosis: dict,
-    n: int,
-) -> list[dict]:
-    """Select up to n parents, relaxing the correlation threshold if needed.
-
-    Tries correlation thresholds 0.7 → 0.85 → 0.95 → no filter,
-    guaranteeing at least min(n, len(candidates)) parents.
-    """
-    correlations = diagnosis.get("correlations", {})
-
-    for threshold in (0.7, 0.85, 0.95, 1.0):
-        selected = []
-        for p in candidates:
-            if len(selected) >= n:
-                break
-            is_duplicate = False
-            if threshold < 1.0:
-                for sel in selected:
-                    for key, corr in correlations.items():
-                        if p["name"] in key and sel["name"] in key and corr > threshold:
-                            is_duplicate = True
-                            break
-                    if is_duplicate:
-                        break
-            if not is_duplicate:
-                selected.append(p)
-
-        if len(selected) >= n or threshold == 1.0:
-            return selected
-
-    return selected
+from parent_selection import select_parents  # noqa: E402
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -463,6 +378,34 @@ def _apply_single_llm_transform(
     }
 
 
+def _latest_llm_suggestions(payload: object) -> list[dict]:
+    """Read current suggestions from old list or new history payloads."""
+    if isinstance(payload, list):
+        return [s for s in payload if isinstance(s, dict)]
+
+    if not isinstance(payload, dict):
+        return []
+
+    latest = payload.get("latest_suggestions")
+    if isinstance(latest, list):
+        return [s for s in latest if isinstance(s, dict)]
+
+    history = payload.get("suggestion_history")
+    if isinstance(history, list):
+        for entry in reversed(history):
+            if not isinstance(entry, dict):
+                continue
+            suggestions = entry.get("suggestions")
+            if isinstance(suggestions, list):
+                return [s for s in suggestions if isinstance(s, dict)]
+
+    suggestions = payload.get("suggestions")
+    if isinstance(suggestions, list):
+        return [s for s in suggestions if isinstance(s, dict)]
+
+    return []
+
+
 def _write_missing_llm_prompt(
     diagnosis: dict,
     knowledge_base: dict,
@@ -512,6 +455,7 @@ def generate_candidates(
     parents = select_parents(
         diagnosis,
         max_parents=max_parents,
+        min_parents=min_parents,
         knowledge_base=knowledge_base,
         use_active_kb=use_active_kb,
     )
@@ -560,8 +504,9 @@ def generate_candidates(
                     candidates.append(new_factor)
                     factor_index += 1
 
-    # If we didn't get enough candidates, try combining promising factors
-    if len(candidates) < max_candidates and len(parents) >= 2:
+    # Static fallback only: if rule-based transforms did not fill the batch,
+    # try combining low-correlation parents. LLM mode should remain LLM-only.
+    if not used_llm and len(candidates) < max_candidates and len(parents) >= 2:
         for i in range(len(parents)):
             for j in range(i + 1, len(parents)):
                 if len(candidates) >= max_candidates:
@@ -673,7 +618,8 @@ def main() -> None:
                 llm_path = str(auto_path)
 
         if llm_path and Path(llm_path).is_file():
-            llm_suggestions = json.loads(Path(llm_path).read_text(encoding="utf-8-sig"))
+            llm_payload = json.loads(Path(llm_path).read_text(encoding="utf-8-sig"))
+            llm_suggestions = _latest_llm_suggestions(llm_payload)
             print(f"[INFO] Loaded {len(llm_suggestions)} LLM transform suggestions from {llm_path}", file=sys.stderr)
         else:
             prompt_path = _write_missing_llm_prompt(
@@ -717,6 +663,7 @@ def main() -> None:
     mutation_parents = select_parents(
         diagnosis,
         max_parents=args.max_parents,
+        min_parents=args.min_parents,
         knowledge_base=kb,
         use_active_kb=use_active_kb,
     )

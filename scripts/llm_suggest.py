@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -36,6 +37,7 @@ from contracts import (  # noqa: E402
     ALLOWED_FUNCTIONS,
     output_path as _resolve_output,
 )
+from parent_selection import select_parents  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Prompt Generation
@@ -146,10 +148,13 @@ def generate_transform_prompt(
     Returns:
         A markdown prompt string to feed to an LLM.
     """
-    diagnostics = diagnosis.get("diagnostics", [])
-    valid = [d for d in diagnostics if d.get("sharpe") is not None]
-    valid.sort(key=lambda d: d.get("sharpe") or 0, reverse=True)
-    top_parents = valid[:num_parents]
+    top_parents = select_parents(
+        diagnosis,
+        max_parents=num_parents,
+        min_parents=min(2, num_parents),
+        knowledge_base=kb,
+        use_active_kb=True,
+    )
 
     lines = [
         "# Factor Evolution — Transformation Suggestion Request",
@@ -227,6 +232,94 @@ def generate_transform_prompt(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Response Application
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def _diagnosis_iteration(diagnosis: dict) -> int | None:
+    """Return the completed iteration that the current diagnosis describes."""
+    for key in ("iteration", "_iteration", "run_iteration"):
+        value = diagnosis.get(key)
+        if isinstance(value, int):
+            return value
+
+    iterations = []
+    for diag in diagnosis.get("diagnostics", []):
+        value = diag.get("_iteration") or diag.get("iteration")
+        if isinstance(value, int):
+            iterations.append(value)
+    return max(iterations) if iterations else None
+
+
+def _iteration_reference(source_iteration: int | None) -> dict:
+    return {
+        "diagnosis_iteration": source_iteration,
+        "candidate_iteration": source_iteration + 1 if isinstance(source_iteration, int) else None,
+    }
+
+
+def _with_iteration_metadata(suggestions: list[dict], diagnosis: dict) -> tuple[list[dict], int | None, dict]:
+    """Attach iteration provenance to each transform suggestion."""
+    source_iteration = _diagnosis_iteration(diagnosis)
+    refers_to = _iteration_reference(source_iteration)
+    annotated = []
+    for suggestion in suggestions:
+        item = dict(suggestion)
+        item["source_iteration"] = source_iteration
+        item["target_iteration"] = refers_to["candidate_iteration"]
+        item["refers_to"] = dict(refers_to)
+        annotated.append(item)
+    return annotated, source_iteration, refers_to
+
+
+def _history_from_payload(payload: object) -> list[dict]:
+    """Normalize old list files and new dict files into history entries."""
+    if isinstance(payload, list):
+        return [{
+            "iteration": None,
+            "refers_to": _iteration_reference(None),
+            "n_suggestions": len(payload),
+            "suggestions": payload,
+        }]
+    if isinstance(payload, dict):
+        history = payload.get("suggestion_history")
+        if isinstance(history, list):
+            return [h for h in history if isinstance(h, dict)]
+        suggestions = payload.get("suggestions")
+        if isinstance(suggestions, list):
+            return [{
+                "iteration": payload.get("iteration"),
+                "refers_to": payload.get("refers_to", _iteration_reference(payload.get("iteration"))),
+                "n_suggestions": len(suggestions),
+                "suggestions": suggestions,
+            }]
+    return []
+
+
+def build_transform_suggestions_payload(
+    suggestions: list[dict],
+    diagnosis: dict,
+    existing_payload: object | None = None,
+) -> dict:
+    """Build the appendable transform_suggestions.json payload."""
+    suggestions, source_iteration, refers_to = _with_iteration_metadata(suggestions, diagnosis)
+    history = _history_from_payload(existing_payload)
+
+    if isinstance(source_iteration, int):
+        history = [h for h in history if h.get("iteration") != source_iteration]
+
+    history.append({
+        "iteration": source_iteration,
+        "refers_to": refers_to,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "n_suggestions": len(suggestions),
+        "suggestions": suggestions,
+    })
+
+    return {
+        "version": 2,
+        "latest_iteration": source_iteration,
+        "latest_suggestions": suggestions,
+        "suggestion_history": history,
+    }
+
 
 def apply_llm_response(
     response_path: str,
@@ -400,8 +493,18 @@ def main() -> None:
         suggestions = apply_llm_response(args.response, diag)
 
         out = args.output or str(_resolve_output("transform_suggestions.json"))
-        Path(out).write_text(json.dumps(suggestions, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(json.dumps({"status": "response_applied", "n_suggestions": len(suggestions), "path": out}, ensure_ascii=False))
+        out_path = Path(out)
+        existing = None
+        if out_path.is_file():
+            existing = json.loads(out_path.read_text(encoding="utf-8-sig"))
+        payload = build_transform_suggestions_payload(suggestions, diag, existing)
+        out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps({
+            "status": "response_applied",
+            "n_suggestions": len(suggestions),
+            "iteration": payload["latest_iteration"],
+            "path": out,
+        }, ensure_ascii=False))
 
     elif args.kb_context:
         kb = {}

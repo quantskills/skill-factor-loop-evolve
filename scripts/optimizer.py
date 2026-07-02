@@ -717,7 +717,19 @@ def _build_transform_reference(output_dir: Path) -> str:
     suggestions_path = output_dir / "transform_suggestions.json"
     if suggestions_path.is_file():
         try:
-            suggestions = json.loads(suggestions_path.read_text(encoding="utf-8-sig"))
+            payload = json.loads(suggestions_path.read_text(encoding="utf-8-sig"))
+            if isinstance(payload, list):
+                suggestions = payload
+            elif isinstance(payload, dict):
+                suggestions = payload.get("latest_suggestions", [])
+                if not suggestions:
+                    history = payload.get("suggestion_history", [])
+                    for entry in reversed(history):
+                        suggestions = entry.get("suggestions", []) if isinstance(entry, dict) else []
+                        if suggestions:
+                            break
+            else:
+                suggestions = []
             for s in suggestions:
                 trans_name = s.get("transformation", "")
                 rationale = s.get("rationale", "")

@@ -30,7 +30,7 @@
     "invalid": { "coverage_min": 0.10 }
   },
   "parent_selection": {
-    "min_parents": 3,
+    "min_parents": 2,
     "max_parents": 3,
     "duplicate_correlation_threshold": 0.7
   },
@@ -96,10 +96,10 @@
       "invalid": "Coverage < coverage_min OR backtest failed OR NaN/inf metrics → invalid"
     },
     "parent_selection": {
-      "_rule": "Sort all valid factors by actual Sharpe (highest first), skip those correlated > threshold with already-selected, take top max_parents",
-      "min_parents": "Fixed number of parent factors to select (same as max_parents)",
-      "max_parents": "Fixed number of parent factors selected per iteration (3)",
-      "duplicate_correlation_threshold": "Skip factor if Spearman correlation > this with any already-selected parent"
+      "_rule": "Rank valid, non-invalid factors by parent_score: actual Sharpe dominates, with small IC/ICIR/classification bonuses and turnover/drawdown/overfit penalties. Prefer parents whose pairwise IC correlation is below duplicate_correlation_threshold.",
+      "min_parents": "Minimum parent count to preserve before relaxing the correlation threshold",
+      "max_parents": "Maximum parent factors selected per iteration",
+      "duplicate_correlation_threshold": "Prefer skipping factor pairs whose absolute Spearman IC correlation exceeds this threshold"
     },
     "evolution_tags": {
       "_desc": "Thresholds for the 🟢/🔴 descriptive tags on evolution diagram nodes",

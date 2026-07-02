@@ -30,10 +30,12 @@ AFTER all iterations:
 frequency, label definition, and cost assumptions across all iterations
 (configurable via `config.json`). This ensures metrics are comparable.
 
-**Parent selection**: Sort all factors by **actual Sharpe** (highest first,
-no absolute value). Skip factors whose IC series correlates > 0.7 with an
-already-selected parent. Take top N (default 3). All factors with valid Sharpe
-are eligible — no classification-based filtering.
+**Parent selection**: Select valid, non-invalid factors by `_parent_score`.
+Actual Sharpe remains the dominant signal. IC/ICIR, classification, turnover,
+drawdown, and active knowledge-base diversity are tie-breakers. Prefer parents
+whose absolute pairwise IC-series correlation is ≤ 0.7. Select up to 3 parents
+by default, but only relax correlation thresholds enough to preserve the
+minimum parent count (default 2).
 
 ---
 
@@ -192,6 +194,7 @@ skill-factor-loop-evolve/
         ├── diagnosis.json           # Classification + metrics + suggestions
         ├── knowledge_base.json      # Experience memory
         ├── candidate_evolution.json # Full genealogy tree
+        ├── transform_suggestions.json # LLM transforms with per-iteration history
         ├── final_summary.json       # Summary report
         ├── evolution_diagram.md     # Mermaid evolution graph
         ├── config.json              # Config snapshot (reproducibility)
@@ -200,3 +203,9 @@ skill-factor-loop-evolve/
 
 Run directory is set via ``FACTOR_OPTIMIZE_RUN_DIR`` environment variable.
 If not set, scripts look for output in the current working directory.
+
+``transform_suggestions.json`` is appendable. It stores
+``suggestion_history[]`` for all applied LLM response iterations, plus
+``latest_suggestions`` for the next candidate-generation call. Every history
+entry and suggestion records ``diagnosis_iteration`` and
+``candidate_iteration`` under ``refers_to``.
