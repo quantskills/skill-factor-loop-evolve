@@ -6,12 +6,12 @@ Uses panda_data API to retrieve real A-share market OHLCV data. Credentials
 are read from a ``.env`` file in the skill root directory.
 
 Data window: configurable via config.json (default: CSI 300, 2024-2025).
-Universe: CSI 300 (000300) by default, configurable via --indicator.
+Universe: CSI 300 (000300) by default, configurable via --universe.
 
 Usage::
 
     python scripts/backtest.py --factors validated_factors_passed.json --output backtest_results_all.json
-    python scripts/backtest.py --factors validated_factors_passed.json --indicator 000905 --output backtest_results_all.json
+    python scripts/backtest.py --factors validated_factors_passed.json --universe 000905 --output backtest_results_all.json
     python scripts/backtest.py --factors validated.json --cost-bps 3 --holding-days 10
 """
 
@@ -603,8 +603,8 @@ def main() -> None:
                         help="Start date YYYYMMDD (default: 20240101).")
     parser.add_argument("--end-date", type=str, default=_default_end_date(),
                         help="End date YYYYMMDD (default: 20251231).")
-    parser.add_argument("--indicator", type=str, default=DEFAULT_BACKTEST_CONFIG.get("indicator", "000300"),
-                        help="Stock universe index code (default from config: 000300 = CSI 300).")
+    parser.add_argument("--universe", type=str, default=DEFAULT_BACKTEST_CONFIG.get("universe", "000300"),
+                        help="Stock universe index code (default from config: 000300 = CSI 300, 000905 = CSI 500, 000016 = SSE 50, 000852 = CSI 1000).")
     parser.add_argument("--include-st", action="store_true",
                         help="Include ST stocks (excluded by default per config).")
     parser.add_argument("--cost-bps", type=float, default=DEFAULT_BACKTEST_CONFIG.get("cost_bps", 5.0),
@@ -620,6 +620,8 @@ def main() -> None:
     parser.add_argument("--lookback-min-days", type=int, default=DEFAULT_BACKTEST_CONFIG.get("lookback_min_days", 252),
                         help="Minimum common dates required for a backtest (default from config).")
     args = parser.parse_args()
+
+    universe = args.universe
 
     factors_path = Path(args.factors)
     if not factors_path.is_file():
@@ -643,7 +645,7 @@ def main() -> None:
         data = fetch_market_data_from_pandadata(
             start_date=args.start_date,
             end_date=args.end_date,
-            indicator=args.indicator,
+            indicator=universe,
             exclude_st=not args.include_st,
         )
         if data is None:
@@ -653,7 +655,7 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-        data_source = f"panda_data ({args.indicator}, {args.start_date}–{args.end_date})"
+        data_source = f"panda_data ({universe}, {args.start_date}–{args.end_date})"
 
     print(f"[INFO] Data source: {data_source}", file=sys.stderr)
     print(f"[INFO] Data shape: {data.shape[0]} rows x {data.shape[1]} cols", file=sys.stderr)
@@ -822,7 +824,7 @@ def main() -> None:
             "data_source": data_source,
             "start_date": args.start_date,
             "end_date": args.end_date,
-            "indicator": args.indicator,
+            "universe": args.universe,
             "run_id": None,
         },
         "total": len(factors),

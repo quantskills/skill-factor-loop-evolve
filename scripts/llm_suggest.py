@@ -211,8 +211,9 @@ def generate_transform_prompt(
                 "parent": "parent_factor_name",
                 "rank": 1,
                 "name": "descriptive-transform-name",
+                "transformation": "flip-sign",
                 "expression": "exact_modified_expression_here",
-                "rationale": "Why this should improve metrics...",
+                "rationale": "Why this should improve metrics — flip the sign because the original direction is wrong.",
                 "expected_impact": "+0.03 to +0.06 Sharpe, -0.05 turnover"
             }
         ],
@@ -222,6 +223,13 @@ def generate_transform_prompt(
             "diversification_needed": "false/true — should we generate fresh seed factors?"
         }
     }, indent=2))
+    lines.append("```\n")
+    lines.append("**`transformation` must be one of**: " + ", ".join(sorted([
+        "flip-sign", "adjust-lookback", "adjust-smoothing", "adjust-clipping",
+        "adjust-normalization", "combine-factors", "simplify", "reduce-turnover",
+        "remove-component", "long-only", "short-only", "asymmetric",
+    ])) + ", or a descriptive kebab-case tag for new semantic transforms (e.g. `gap-reversal`, `cumulative-aggregation`).")
+    lines.append("**`rationale` is REQUIRED** — a 1-3 sentence explanation of what changed and why.")
     lines.append("```\n")
     lines.append("Generate **3-5 transforms per parent**. Merge similar transforms across parents.")
     lines.append("**Return ONLY the JSON — no markdown, no explanations, no code fences.**")

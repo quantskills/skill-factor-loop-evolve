@@ -6,7 +6,7 @@
     "long_pct": 0.2,
     "short_pct": 0.2,
     "lookback_min_days": 252,
-    "indicator": "000300",
+    "universe": "000300",
     "start_date": "20240101",
     "end_date": "20251231",
     "exclude_st": true
@@ -73,7 +73,7 @@
       "long_pct": "Fraction of universe to go long (top quantile)",
       "short_pct": "Fraction of universe to go short (bottom quantile)",
       "lookback_min_days": "Minimum trading days required per stock to be included",
-      "indicator": "Stock universe index code (000300 = CSI 300, 000905 = CSI 500)",
+      "universe": "Stock universe index code (000300 = CSI 300, 000905 = CSI 500, 000016 = SSE 50, 000852 = CSI 1000)",
       "start_date": "Backtest start date in YYYYMMDD format",
       "end_date": "Backtest end date in YYYYMMDD format",
       "exclude_st": "If true, exclude ST (special treatment) stocks from universe"

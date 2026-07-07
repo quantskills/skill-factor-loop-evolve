@@ -344,6 +344,112 @@ def _normalize_expr(expr: str) -> str:
     return expr.strip().replace(" ", "").strip("()")
 
 
+def _infer_transformation_tag(
+    new_expr: str,
+    parent_expr: str,
+    rationale: str,
+    suggestion: dict,
+) -> str:
+    """Infer a descriptive transformation tag from the LLM suggestion.
+
+    Examines the expression change and rationale text to map to the closest
+    transformation from the catalog, or derives a custom descriptive tag.
+    Never returns the generic ``llm-suggested``.
+    """
+    # 1) If LLM explicitly provided a transformation tag, use it
+    explicit = suggestion.get("transformation", "")
+    if explicit and explicit != "llm-suggested":
+        return explicit
+
+    rationale_lower = rationale.lower()
+    new_norm = _normalize_expr(new_expr)
+    parent_norm = _normalize_expr(parent_expr)
+
+    # 2) Sign flip: expression is negated version of parent
+    if new_norm == _normalize_expr(f"-({parent_expr})") or new_norm.startswith("-"):
+        # Check if the core expression is just negated
+        stripped_new = new_norm.lstrip("-")
+        if stripped_new == parent_norm or stripped_new.startswith(parent_norm):
+            return "flip-sign"
+
+    # 3) Smoothing / lookback: wrapped in ts_mean, decay_linear, ts_sum
+    smoothing_funcs = ["ts_mean", "decay_linear", "ts_std", "ts_zscore", "ts_rank"]
+    for sf in smoothing_funcs:
+        if sf in new_expr.lower() and sf not in parent_expr.lower():
+            # Check if it's fundamentally about smoothing
+            if any(w in rationale_lower for w in ["smooth", "reduce noise", "rolling", "lookback"]):
+                return "adjust-smoothing"
+            return "adjust-lookback"
+
+    # 4) Normalization change: different normalizer field
+    normalizer_fields = {"volume", "amount", "high - low", "high-low"}
+    new_norm_field = None
+    parent_norm_field = None
+    for nf in normalizer_fields:
+        nf_norm = nf.replace(" - ", "-").replace(" ", "")
+        if f"max({nf_norm}" in new_norm or f"max({nf}" in new_expr.lower():
+            new_norm_field = nf
+        if f"max({nf_norm}" in parent_norm or f"max({nf}" in parent_expr.lower():
+            parent_norm_field = nf
+    if new_norm_field and parent_norm_field and new_norm_field != parent_norm_field:
+        return "adjust-normalization"
+
+    # 5) Combine factors: contains "+" combining two distinct signal terms
+    if "+" in new_expr and "+" not in parent_expr:
+        if any(w in rationale_lower for w in ["combin", "add ", "blend", "plus", "diversif"]):
+            return "combine-factors"
+
+    # 6) Clipping added
+    if "clip" in new_expr.lower() and "clip" not in parent_expr.lower():
+        return "adjust-clipping"
+
+    # 7) Reduce turnover / directional
+    if any(w in rationale_lower for w in ["turnover", "trading cost"]):
+        return "reduce-turnover"
+    if any(w in rationale_lower for w in ["long-only", "long only"]):
+        return "long-only"
+    if any(w in rationale_lower for w in ["short-only", "short only"]):
+        return "short-only"
+    if any(w in rationale_lower for w in ["asymmetric"]):
+        return "asymmetric"
+    if any(w in rationale_lower for w in ["simplif", "remove"]):
+        return "simplify"
+
+    # 8) Cumulative / sum aggregation
+    if "ts_sum" in new_expr.lower() and "ts_sum" not in parent_expr.lower():
+        return "adjust-aggregation"
+
+    # 9) New field or fundamentally new construction
+    new_fields = {f for f in ["open", "high", "low", "close", "volume", "amount"] if f in new_expr.lower()}
+    parent_fields = {f for f in ["open", "high", "low", "close", "volume", "amount"] if f in parent_expr.lower()}
+    if new_fields != parent_fields:
+        new_only = new_fields - parent_fields
+        if new_only:
+            return f"introduce-{'-'.join(sorted(new_only))}"
+
+    # 10) Fallback: extract key concept from rationale
+    keywords = [
+        ("reversal", "reversal"),
+        ("momentum", "momentum"),
+        ("gap", "gap-signal"),
+        ("cumulative", "cumulative"),
+        ("acceleration", "acceleration"),
+        ("revert", "reversal"),
+        ("unflip", "unflip"),
+        ("flip", "flip-sign"),
+        ("smooth", "adjust-smoothing"),
+        ("normaliz", "adjust-normalization"),
+        ("combine", "combine-factors"),
+        ("range", "introduce-range"),
+        ("amount", "introduce-amount"),
+    ]
+    for keyword, tag in keywords:
+        if keyword in rationale_lower:
+            return tag
+
+    return "semantic-transform"
+
+
 def _apply_single_llm_transform(
     suggestion: dict,
     parent_lookup: dict[str, dict],
@@ -366,15 +472,23 @@ def _apply_single_llm_transform(
         return None
 
     name = _safe_factor_name(suggestion.get("name", f"{parent_name}_llm_variant"))
+    rationale = suggestion.get("rationale", "LLM-driven transformation")
+
+    # Use LLM-provided transformation tag directly; infer only as fallback
+    transformation = suggestion.get("transformation", "")
+    if not transformation or transformation == "llm-suggested":
+        transformation = _infer_transformation_tag(expr, parent_expr, rationale, suggestion)
+        print(f"[WARN] LLM suggestion '{name}' missing 'transformation' field — inferred '{transformation}'.", file=sys.stderr)
+
     return {
         "name": name,
         "expression": expr,
         "description": suggestion.get("description", f"LLM-suggested variant of {parent_name}"),
-        "rationale": suggestion.get("rationale", "LLM-driven transformation"),
+        "rationale": rationale,
         "expected_impact": suggestion.get("expected_impact", ""),
         "generation": "llm-transform",
         "parent": parent_name,
-        "transformation": suggestion.get("transformation", "llm-suggested"),
+        "transformation": transformation,
     }
 
 
@@ -576,6 +690,8 @@ def main() -> None:
                         help="Force static rule-based transforms, even when config enables LLM transforms.")
     parser.add_argument("--llm-suggestions", type=str, default="",
                         help="Path to LLM transform suggestions JSON (from llm_suggest.py --apply-response).")
+    parser.add_argument("--llm-response", type=str, default="",
+                        help="Path to a JSON file with LLM transform suggestions (direct format: array of {parent, expression, rationale, ...}). Use this to bypass the prompt/response file cycle.")
     parser.add_argument("--no-active-kb", action="store_true",
                         help="Disable active knowledge base diversity boosts in parent selection.")
     args = parser.parse_args()
@@ -605,7 +721,8 @@ def main() -> None:
     # ── Load LLM suggestions ────────────────────────────────────────
     llm_suggestions = None
     if use_llm:
-        llm_path = args.llm_suggestions
+        # Priority 1: --llm-response (direct JSON from agent/LLM)
+        llm_path = args.llm_response or args.llm_suggestions
         if not llm_path:
             # Auto-detect: look for transform_suggestions.json in output dir
             if args.output:
@@ -632,15 +749,16 @@ def main() -> None:
             print(json.dumps({
                 "status": "llm_suggestions_required",
                 "message": (
-                    "LLM transforms are enabled. Feed transform_prompt.md to an LLM, "
-                    "save the JSON response, then run llm_suggest.py --apply-response "
-                    "to create transform_suggestions.json before generating candidates."
+                    "LLM transforms are enabled. The agent should read transform_prompt.md, "
+                    "synthesize semantic transformations, save them as JSON, and re-run with "
+                    "--llm-response <file>."
                 ),
                 "prompt_path": str(prompt_path),
                 "next_steps": [
-                    "Send transform_prompt.md to an LLM and save the raw JSON response as llm_response.json.",
-                    "python scripts/llm_suggest.py --apply-response --response llm_response.json --diagnosis diagnosis.json --output transform_suggestions.json",
-                    "python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json",
+                    "1. Read transform_prompt.md",
+                    "2. Synthesize 3-5 semantic transformations per parent as a JSON array",
+                    "3. Save to llm_response.json in the output directory",
+                    "4. Re-run: python scripts/generate_candidates.py --diagnosis ... --knowledge ... --llm-response llm_response.json",
                 ],
                 "static_fallback": "Use --no-llm only when you intentionally want static rule-based transforms.",
             }, ensure_ascii=False, indent=2))

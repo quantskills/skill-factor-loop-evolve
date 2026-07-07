@@ -152,7 +152,7 @@ DEFAULT_BACKTEST_CONFIG: dict = {
     "long_pct": _config.get("backtest", {}).get("long_pct", 0.2),
     "short_pct": _config.get("backtest", {}).get("short_pct", 0.2),
     "lookback_min_days": _config.get("backtest", {}).get("lookback_min_days", 252),
-    "indicator": _config.get("backtest", {}).get("indicator", "000300"),
+    "universe": _config.get("backtest", {}).get("universe", "000300"),
     "start_date": _config.get("backtest", {}).get("start_date", "20240101"),
     "end_date": _config.get("backtest", {}).get("end_date", "20251231"),
     "exclude_st": _config.get("backtest", {}).get("exclude_st", True),
