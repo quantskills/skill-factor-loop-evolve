@@ -114,6 +114,9 @@ This skill provides:
 
 1. **Place initial candidates** — `candidates.json` in the run output folder
    with 5–15 factor expressions (name, expression, description, rationale, generation).
+   If the user does not provide an explicit target/output, default to the
+   objective **increase Sharpe** and invent the initial candidate factors as
+   the agent.
 2. **Verify config** — `config.json` at skill root defines all thresholds.
    Scripts fall back to hardcoded defaults if missing.
 3. **Set PandaData credentials** — in `.env` at skill root.
@@ -423,7 +426,9 @@ pipeline (factor-loop-evolve). You will iterate for {N} rounds.
 ## Setup
 1. Read config.json for current hyperparameters.
 2. Read references/factor-contract.md for allowed fields and functions.
-3. Place initial candidates as candidates.json in the output directory.
+3. If the user did not give an explicit target/output, set the objective to
+   "increase Sharpe" and invent 5-15 initial candidate factors yourself.
+   Place initial candidates as candidates.json in the output directory.
 4. Set FACTOR_OPTIMIZE_RUN_DIR and init knowledge base:
    python scripts/knowledge_base.py --init --output $FACTOR_OPTIMIZE_RUN_DIR/knowledge_base.json
 

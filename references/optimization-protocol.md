@@ -12,18 +12,20 @@ taxonomy, transformation catalog, and stopping criteria for
 SETUP:
   1. Set FACTOR_OPTIMIZE_RUN_DIR (auto-timestamped if not set)
   2. Init knowledge base inside output dir
-  3. Place initial candidates as candidates.json (5–15 factors)
-  4. Validate all candidates → reject invalid ones
+  3. If no explicit target/output is given, default to increasing Sharpe and
+     let the agent invent the initial candidate factors
+  4. Place initial candidates as candidates.json (5–15 factors)
+  5. Validate all candidates → reject invalid ones
 
 FOR iteration = 1 to N:
-  5. Backtest validated factors with fixed engine
-  6. Diagnose: compute metrics → classify each factor (first-match)
-  7. Learn: update knowledge base with lessons
-  8. Check stopping criteria → exit if met
-  9. Generate next batch: select parents → apply transformations → validate
+  6. Backtest validated factors with fixed engine
+  7. Diagnose: compute metrics → classify each factor (first-match)
+  8. Learn: update knowledge base with lessons
+  9. Check stopping criteria → exit if met
+  10. Generate next batch: select parents → apply transformations → validate
 
 AFTER all iterations:
-  10. Final summary: optimization log, top 5 factors, evolution diagram, config
+  11. Final summary: optimization log, top 5 factors, evolution diagram, config
 ```
 
 **Stable testing setup**: The backtest engine uses the same universe,

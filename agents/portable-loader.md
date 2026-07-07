@@ -16,10 +16,12 @@ pipeline, or improve a factor library through closed-loop research:
 3. Read <<SKILL_ROOT>>/references/optimization-protocol.md for
    the loop protocol, classification taxonomy, and stopping criteria.
 4. Read <<SKILL_ROOT>>/config.json for current hyperparameters.
-5. Set FACTOR_OPTIMIZE_RUN_DIR and init knowledge base:
+5. If the user did not give an explicit target/output, default to increasing
+   Sharpe and invent 5-15 initial candidate factors yourself.
+6. Set FACTOR_OPTIMIZE_RUN_DIR and init knowledge base:
    python <<SKILL_ROOT>>/scripts/knowledge_base.py --init --output $FACTOR_OPTIMIZE_RUN_DIR/knowledge_base.json
-6. Place initial candidates as candidates.json in the output directory (5–15 factors).
-7. For each iteration 1..N:
+7. Place initial candidates as candidates.json in the output directory (5–15 factors).
+8. For each iteration 1..N:
    a. Validate:
       python <<SKILL_ROOT>>/scripts/validator.py --factors candidates.json
    b. Backtest:
@@ -36,9 +38,9 @@ pipeline, or improve a factor library through closed-loop research:
    g. Generate next batch from LLM suggestions:
       python <<SKILL_ROOT>>/scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json
       Then validate next_candidates.json for the next loop.
-8. After all iterations:
+9. After all iterations:
    python <<SKILL_ROOT>>/scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json
-9. Read final_summary.json and present:
+10. Read final_summary.json and present:
    - Optimization log (Sharpe progression)
    - Top 5 best factors
    - Whether worth keeping

@@ -1,4 +1,4 @@
 interface:
   display_name: "Factor Loop Evolve"
   short_description: "Closed-loop factor evolution: validate, backtest, diagnose, learn, generate variants, repeat for N iterations. Factors evolve through controlled transformations toward higher Sharpe."
-  default_prompt: "Use $factor-loop-evolve to run a closed-loop factor evolution with {N} iterations on {factor_theme}."
+  default_prompt: "Use $factor-loop-evolve to run a closed-loop factor evolution with {N} iterations. If no explicit target/output is given, optimize for higher Sharpe starting from agent-invented factors."

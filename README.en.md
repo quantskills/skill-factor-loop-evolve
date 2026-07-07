@@ -26,6 +26,9 @@ You can start from:
 - A random exploration request.
 - A research note, report, or paper excerpt that describes factor logic.
 
+If no explicit target/output is given, the default objective is to increase
+Sharpe, starting from factors invented by the agent.
+
 All generated expressions must follow [the factor contract](references/factor-contract.md).
 
 Example requests:

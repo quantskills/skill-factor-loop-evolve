@@ -12,10 +12,12 @@ factor evolution loop, or improve a factor library:
 2. Read `references/factor-contract.md`.
 3. Read `references/optimization-protocol.md`.
 4. Read `config.json` for current hyperparameters.
-5. Set `FACTOR_OPTIMIZE_RUN_DIR` and init knowledge base:
+5. If the user did not give an explicit target/output, default to increasing
+   Sharpe and invent 5-15 initial candidate factors yourself.
+6. Set `FACTOR_OPTIMIZE_RUN_DIR` and init knowledge base:
    `python scripts/knowledge_base.py --init --output $FACTOR_OPTIMIZE_RUN_DIR/knowledge_base.json`
-6. Place initial candidates as `candidates.json` in the output directory.
-7. For each iteration (1..N):
+7. Place initial candidates as `candidates.json` in the output directory.
+8. For each iteration (1..N):
    - Validate:
      `python scripts/validator.py --factors candidates.json`
    - Backtest:
@@ -32,7 +34,7 @@ factor evolution loop, or improve a factor library:
    - Generate next batch from LLM suggestions:
      `python scripts/generate_candidates.py --diagnosis diagnosis.json --knowledge knowledge_base.json --output next_candidates.json`
      Then validate next_candidates.json for the next loop.
-8. After all iterations:
+9. After all iterations:
    `python scripts/optimizer.py --summary --knowledge knowledge_base.json --output final_summary.json`
-9. Read `final_summary.json` and report: optimization log, top 5 factors,
+10. Read `final_summary.json` and report: optimization log, top 5 factors,
    worth keeping, key patterns, evolution diagram.
