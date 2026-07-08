@@ -516,14 +516,19 @@ class FixedBacktestEngine:
 # CSV Trading Data Export
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _save_trading_csv(td_dir: Path, trading_data_all: dict) -> None:
+def _save_trading_csv(td_dir: Path, trading_data_all: dict, market_data: pd.DataFrame | None = None) -> None:
     """Save trading data as CSV files for easy analysis in Excel/Pandas.
 
-    Produces three CSV files:
+    Produces four CSV files:
+    - ``market_data.csv``: raw OHLCV data (date, symbol, open, high, low, close, volume, amount)
     - ``portfolio_returns.csv``: factor_name, period, return
     - ``ic_series.csv``: factor_name, period, ic
-    - ``positions.csv``: factor_name, date, symbol, score
+    - ``positions.csv``: factor_name, date, symbol, score, side
     """
+    # ── Raw market data (OHLCV) ────────────────────────────────────────
+    if market_data is not None and not market_data.empty:
+        market_data.to_csv(td_dir / "market_data.csv", index=False)
+
     # ── Portfolio returns ──────────────────────────────────────────────
     pr_rows = []
     for factor_name, td in trading_data_all.items():
@@ -748,7 +753,7 @@ def main() -> None:
 
     if trading_data_all:
         # ── Save as CSV ──────────────────────────────────────────────────
-        _save_trading_csv(td_dir, trading_data_all)
+        _save_trading_csv(td_dir, trading_data_all, data)
         print(f"[INFO] Trading data (CSV) saved to {td_dir}", file=sys.stderr)
 
     # ── Update evolution file with actual Sharpe values ──────────────────
