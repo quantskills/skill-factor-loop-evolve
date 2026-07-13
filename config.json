@@ -53,7 +53,7 @@
   },
   "stopping": {
     "min_iterations": 1,
-    "max_iterations": 3,
+    "max_iterations": 10,
     "stall_iterations": 3,
     "diminishing_return_threshold": 0.02,
     "worth_keeping_sharpe_threshold": 0.3
