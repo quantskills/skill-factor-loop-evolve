@@ -76,6 +76,75 @@ pip install -r requirements.txt
 - `evolution_diagram.md`：进化图。
 - `trading_data/`：组合收益、IC 序列和持仓。
 
+## 构建 Alpha 因子库
+
+多次运行进化流程后，`output/` 目录下会积累多个 `run_*` 文件夹。使用
+`build_alpha_library.py` 将所有运行的 `final_summary.json` 合并成一个统一的
+因子库，并按表达式去重（相同表达式保留 Sharpe 最高的那次）。
+
+### 用法
+
+```bash
+# 基本用法：扫描 output/ 下所有 run_*，生成 alpha_library.json
+python scripts/build_alpha_library.py
+
+# 指定输出路径
+python scripts/build_alpha_library.py --output my_library.json
+
+# 只保留 Sharpe ≥ 0.3 的因子
+python scripts/build_alpha_library.py --min-sharpe 0.3
+
+# 指定自定义 output 目录
+python scripts/build_alpha_library.py --output-dir /path/to/output
+```
+
+### 参数说明
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--output` | 输出 JSON 文件路径 | `alpha_library.json`（技能根目录） |
+| `--min-sharpe` | 最低 Sharpe 阈值，低于此值的因子不收录 | 无限制 |
+| `--output-dir` | 包含 `run_*` 文件夹的目录 | `./output/` |
+
+### 输出格式
+
+生成的 `alpha_library.json` 结构：
+
+```json
+{
+  "meta": {
+    "total_factors": 60,
+    "total_runs_scanned": 12,
+    "total_runs_contributing": 12,
+    "positive_sharpe_count": 28,
+    "best_sharpe": 0.8656,
+    "worst_sharpe": -0.4289,
+    "min_sharpe_filter": null
+  },
+  "entries": [
+    {
+      "expression": "-1 * rank(delta(returns(close, 10), 5) / ...)",
+      "sharpe": 0.8656,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_returns_close_10_5_max_..."
+    }
+  ]
+}
+```
+
+每个因子条目包含：
+
+- `expression` — 因子表达式。
+- `sharpe` — 年化 Sharpe 比率。
+- `source_run` — 来源运行目录名。
+- `source_query` — 触发该运行的原始查询。
+- `worth_keeping` — 该运行是否值得保留。
+- `slug` — 表达式导出的短标识名。
+
+因子按 Sharpe 从高到低排序。`meta` 中提供汇总统计，方便快速了解库的整体质量。
+
 ## 配置
 
 通过 `config.json` 调整回测区间、股票池、成本、停止条件、分类阈值和变换设置。

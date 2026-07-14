@@ -1,0 +1,814 @@
+{
+  "meta": {
+    "total_factors": 100,
+    "total_runs_scanned": 20,
+    "total_runs_contributing": 20,
+    "positive_sharpe_count": 57,
+    "best_sharpe": 1.4007,
+    "worst_sharpe": -0.4461,
+    "min_sharpe_filter": null,
+    "generated_from": "/Users/davideliu/Desktop/projects/quantskills/skill-factor-loop-evolve/output"
+  },
+  "entries": [
+    {
+      "expression": "rank(-1 * abs(returns(close, 5)) / max(ts_std(returns(close, 1), 20), 1e-8)) + rank(-1 * (ts_std(volume, 20) / ts_mean(volume, 20)))",
+      "sharpe": 1.4007,
+      "source_run": "run_20260714_092323_minimize_volatility_5iter",
+      "source_query": "minimize volatility",
+      "worth_keeping": true,
+      "slug": "rank_1_abs_returns_close_5_max_ts_std_returns_close_1_20_1e_"
+    },
+    {
+      "expression": "-1 * rank(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)) * rank(ts_std(close, 20) / max(ts_std(close, 252), 1e-8)) * rank((amount - delay(amount, 10)) / max(delay(amount, 10), 1e-8))",
+      "sharpe": 1.3957,
+      "source_run": "run_20260714_085427_expert_trader",
+      "source_query": "Run 5 iterations making alpha like an expert financial trader. Focus on multi-factor interaction, volatility regime detection, and mean reversion with volume confirmation.",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_ts_std_close_20_5_max_ts_mean_close_20_1e_8_ran"
+    },
+    {
+      "expression": "rank(-1 * decay_linear(ts_std(volume, 20) / max(ts_mean(volume, 20), 1e-8), 10)) + rank(-1 * abs(returns(close, 5)) / max(ts_std(returns(close, 1), 20), 1e-8))",
+      "sharpe": 1.2768,
+      "source_run": "run_20260714_092323_minimize_volatility_5iter",
+      "source_query": "minimize volatility",
+      "worth_keeping": true,
+      "slug": "rank_1_decay_linear_ts_std_volume_20_max_ts_mean_volume_20_1"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(returns(close, 10)) * rank((amount - delay(amount, 10)) / max(delay(amount, 10), 1e-8)) * rank(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)) * rank(ts_std(close, 10) / max(ts_std(close, 120), 1e-8)), 20)",
+      "sharpe": 1.2661,
+      "source_run": "run_20260714_085427_expert_trader",
+      "source_query": "Run 5 iterations making alpha like an expert financial trader. Focus on multi-factor interaction, volatility regime detection, and mean reversion with volume confirmation.",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_returns_close_10_rank_amount_delay_amount_10_"
+    },
+    {
+      "expression": "-1 * rank(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)) * rank(ts_std(close, 10) / max(ts_std(close, 120), 1e-8)) * rank((amount - delay(amount, 10)) / max(delay(amount, 10), 1e-8))",
+      "sharpe": 1.2276,
+      "source_run": "run_20260714_085427_expert_trader",
+      "source_query": "Run 5 iterations making alpha like an expert financial trader. Focus on multi-factor interaction, volatility regime detection, and mean reversion with volume confirmation.",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_ts_std_close_20_5_max_ts_mean_close_20_1e_8_ran"
+    },
+    {
+      "expression": "rank(rank(-1 * abs(returns(close, 5)) / max(ts_std(returns(close, 1), 40), 1e-8)) + rank(-1 * (ts_std(volume, 20) / ts_mean(volume, 20)))) + rank(rank(-1 * decay_linear(ts_std(volume, 20) / max(ts_mean(volume, 20), 1e-8), 10)) + rank(-1 * abs(returns(close, 5)) / max(ts_std(returns(close, 1), 20), 1e-8)))",
+      "sharpe": 1.1488,
+      "source_run": "run_20260714_092323_minimize_volatility_5iter",
+      "source_query": "minimize volatility",
+      "worth_keeping": true,
+      "slug": "rank_rank_1_abs_returns_close_5_max_ts_std_returns_close_1_4"
+    },
+    {
+      "expression": "rank(-1 * abs(returns(close, 5)) / max(ts_std(returns(close, 1), 40), 1e-8)) + rank(-1 * (ts_std(volume, 20) / ts_mean(volume, 20))) + ts_rank(-1 * (ts_std(amount, 20) / max(ts_mean(amount, 20), 1e-8)), 5)",
+      "sharpe": 1.102,
+      "source_run": "run_20260714_092323_minimize_volatility_5iter",
+      "source_query": "minimize volatility",
+      "worth_keeping": true,
+      "slug": "rank_1_abs_returns_close_5_max_ts_std_returns_close_1_40_1e_"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(returns(close, 20)) * rank((amount - delay(amount, 20)) / max(delay(amount, 20), 1e-8)) * rank(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)) * rank(ts_std(close, 10) / max(ts_std(close, 120), 1e-8)), 20)",
+      "sharpe": 1.0845,
+      "source_run": "run_20260714_085427_expert_trader",
+      "source_query": "Run 5 iterations making alpha like an expert financial trader. Focus on multi-factor interaction, volatility regime detection, and mean reversion with volume confirmation.",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_returns_close_20_rank_amount_delay_amount_20_"
+    },
+    {
+      "expression": "rank(-1 * abs(returns(close, 5)) / max(ts_std(returns(close, 1), 40), 1e-8)) + rank(-1 * (ts_std(volume, 20) / ts_mean(volume, 20)))",
+      "sharpe": 1.0351,
+      "source_run": "run_20260714_092323_minimize_volatility_5iter",
+      "source_query": "minimize volatility",
+      "worth_keeping": true,
+      "slug": "rank_1_abs_returns_close_5_max_ts_std_returns_close_1_40_1e_"
+    },
+    {
+      "expression": "-1 * rank(ts_std(amount, 20) / ts_mean(amount, 20) + ts_std(volume, 20) / ts_mean(volume, 20)) + (-1 * rank((open - delay(close, 1)) / delay(close, 1)))",
+      "sharpe": 0.9941,
+      "source_run": "run_20260714_092315_minimize_drawdown",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_std_amount_20_ts_mean_amount_20_ts_std_volume_20_t"
+    },
+    {
+      "expression": "0.7 * (-1 * ts_rank(rank(returns(close, 10)) * rank((amount - delay(amount, 10)) / max(delay(amount, 10), 1e-8)) * rank(ts_std(close, 10) / max(ts_std(close, 60), 1e-8)), 20)) + 0.3 * (-1 * rank(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)) * rank(ts_std(close, 10) / max(ts_std(close, 120), 1e-8)) * rank((amount - delay(amount, 10)) / max(delay(amount, 10), 1e-8)))",
+      "sharpe": 0.9894,
+      "source_run": "run_20260714_085427_expert_trader",
+      "source_query": "Run 5 iterations making alpha like an expert financial trader. Focus on multi-factor interaction, volatility regime detection, and mean reversion with volume confirmation.",
+      "worth_keeping": true,
+      "slug": "0_7_1_ts_rank_rank_returns_close_10_rank_amount_delay_amount"
+    },
+    {
+      "expression": "-1 * rank(decay_linear(ts_std(amount, 20) / ts_mean(amount, 20), 5)) + (-1 * rank((open - delay(close, 1)) / delay(close, 1)))",
+      "sharpe": 0.9369,
+      "source_run": "run_20260714_092315_minimize_drawdown",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "1_rank_decay_linear_ts_std_amount_20_ts_mean_amount_20_5_1_r"
+    },
+    {
+      "expression": "-1 * rank(delta(returns(close, 10), 5) / max(ts_std(returns(close, 1), 20), 1e-8))",
+      "sharpe": 0.8656,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_returns_close_10_5_max_ts_std_returns_close_1_2"
+    },
+    {
+      "expression": "-1 * delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8) * (volume / max(ts_mean(volume, 20), 1e-8))",
+      "sharpe": 0.8177,
+      "source_run": "run_20260708_123810_bollinger",
+      "source_query": "Bollinger Bands factor evolution: optimize %b, bandwidth, squeeze, and breakout factors.",
+      "worth_keeping": true,
+      "slug": "1_delta_ts_std_close_20_5_max_ts_mean_close_20_1e_8_volume_m"
+    },
+    {
+      "expression": "-1 * rank(ts_std(amount, 20) / ts_mean(amount, 20)) + (-1 * rank((open - delay(close, 1)) / delay(close, 1)))",
+      "sharpe": 0.7711,
+      "source_run": "run_20260714_092315_minimize_drawdown",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_std_amount_20_ts_mean_amount_20_1_rank_open_delay_"
+    },
+    {
+      "expression": "-1 * rank((open - delay(close, 1)) / max(delay(close, 1), 1e-8)) * rank(delta(returns(close, 10), 5) / max(ts_std(returns(close, 1), 20), 1e-8))",
+      "sharpe": 0.705,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_open_delay_close_1_max_delay_close_1_1e_8_rank_delta_"
+    },
+    {
+      "expression": "-1 * delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)",
+      "sharpe": 0.699,
+      "source_run": "run_20260708_123810_bollinger",
+      "source_query": "Bollinger Bands factor evolution: optimize %b, bandwidth, squeeze, and breakout factors.",
+      "worth_keeping": true,
+      "slug": "1_delta_ts_std_close_20_5_max_ts_mean_close_20_1e_8"
+    },
+    {
+      "expression": "-1 * rank(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8))",
+      "sharpe": 0.699,
+      "source_run": "run_20260708_123810_bollinger",
+      "source_query": "Bollinger Bands factor evolution: optimize %b, bandwidth, squeeze, and breakout factors.",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_ts_std_close_20_5_max_ts_mean_close_20_1e_8"
+    },
+    {
+      "expression": "rank((high - low) / max(ts_mean(close, 60), 1e-8)) * rank(-delta(close, 126) / max(ts_std(close, 126), 1e-8))",
+      "sharpe": 0.6982,
+      "source_run": "run_20260713_194532_taming_factor_zoo",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_high_low_max_ts_mean_close_60_1e_8_rank_delta_close_126"
+    },
+    {
+      "expression": "-1 * rank((open - delay(close, 1)) / max(delay(close, 1), 1e-8)) * rank(ts_std(close, 10) / max(ts_std(close, 60), 1e-8))",
+      "sharpe": 0.6798,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_open_delay_close_1_max_delay_close_1_1e_8_rank_ts_std"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(returns(close, 10)) * rank((amount - delay(amount, 10)) / max(delay(amount, 10), 1e-8)), 20)",
+      "sharpe": 0.6481,
+      "source_run": "run_20260708_123256_volume_momentum",
+      "source_query": "Start with volume momentum based factors. Optimize for higher Sharpe.",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_returns_close_10_rank_amount_delay_amount_10_"
+    },
+    {
+      "expression": "rank(1 / max(ts_std(volume, 20) / max(ts_mean(volume, 20), 1e-8), 1e-8) - 0.5 * (close - low) / max(high - low, 1e-8))",
+      "sharpe": 0.6332,
+      "source_run": "run_20260714_092245_momentum",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_1_max_ts_std_volume_20_max_ts_mean_volume_20_1e_8_1e_8_"
+    },
+    {
+      "expression": "-1 * rank(ts_std(amount, 20) / ts_mean(amount, 20)) + (-1 * rank(returns(close, 10)))",
+      "sharpe": 0.6248,
+      "source_run": "run_20260714_092315_minimize_drawdown",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_std_amount_20_ts_mean_amount_20_1_rank_returns_clo"
+    },
+    {
+      "expression": "-1 * rank(ts_std(amount, 20) / ts_mean(amount, 20)) + (-1 * rank(returns(close, 10))) + (-1 * rank((open - delay(close, 1)) / delay(close, 1)))",
+      "sharpe": 0.5827,
+      "source_run": "run_20260714_092315_minimize_drawdown",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_std_amount_20_ts_mean_amount_20_1_rank_returns_clo"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(delta(amount, 10) / max(delay(amount, 10), 1e-8)), 20) * rank(returns(close, 5) * volume / max(adv(20), 1e-8)) * rank((open - delay(close, 1)) / max(delay(close, 1), 1e-8))",
+      "sharpe": 0.5512,
+      "source_run": "run_20260714_085418_volume_momentum",
+      "source_query": "volume momentum based alpha factors, 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_delta_amount_10_max_delay_amount_10_1e_8_20_r"
+    },
+    {
+      "expression": "rank(decay_linear(1 / max(ts_std(volume, 20) / max(ts_mean(volume, 20), 1e-8), 1e-8), 5))",
+      "sharpe": 0.5498,
+      "source_run": "run_20260714_092245_momentum",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_decay_linear_1_max_ts_std_volume_20_max_ts_mean_volume_"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(returns(close, 10) * volume / max(adv(20), 1e-8)) * rank(delta(amount, 20) / max(delay(amount, 20), 1e-8)), 20)",
+      "sharpe": 0.4859,
+      "source_run": "run_20260714_085418_volume_momentum",
+      "source_query": "volume momentum based alpha factors, 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_returns_close_10_volume_max_adv_20_1e_8_rank_"
+    },
+    {
+      "expression": "-1 * rank((close - ts_mean(close, 10)) / max(ts_std(close, 20), 1e-8)) * rank(ts_std(close, 3) / max(ts_std(close, 40), 1e-8)) * rank(delta(returns(close, 10), 5) / max(ts_std(returns(close, 1), 20), 1e-8))",
+      "sharpe": 0.4841,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_close_ts_mean_close_10_max_ts_std_close_20_1e_8_rank_"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(delta(amount, 10) / max(delay(amount, 10), 1e-8)), 20) * rank(returns(close, 5) * volume / max(adv(20), 1e-8))",
+      "sharpe": 0.476,
+      "source_run": "run_20260714_085418_volume_momentum",
+      "source_query": "volume momentum based alpha factors, 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_delta_amount_10_max_delay_amount_10_1e_8_20_r"
+    },
+    {
+      "expression": "-1 * ts_rank(rank((open - delay(close, 1)) / max(delay(close, 1), 1e-8)) * rank(returns(close, 5) * volume / max(adv(20), 1e-8)) * rank(delta(amount, 10) / max(delay(amount, 10), 1e-8)), 20)",
+      "sharpe": 0.4706,
+      "source_run": "run_20260714_085418_volume_momentum",
+      "source_query": "volume momentum based alpha factors, 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_open_delay_close_1_max_delay_close_1_1e_8_ran"
+    },
+    {
+      "expression": "-1 * rank((open - delay(close, 1)) / max(delay(close, 24), 1e-8))",
+      "sharpe": 0.4666,
+      "source_run": "run_20260713_194409_factor_zoo_china",
+      "source_query": "Generate alpha factors from 'Taming the Factor Zoo: New Evidence from China'",
+      "worth_keeping": true,
+      "slug": "1_rank_open_delay_close_1_max_delay_close_24_1e_8"
+    },
+    {
+      "expression": "rank(1 / max(ts_std(volume, 20) / max(ts_mean(volume, 20), 1e-8), 1e-8))",
+      "sharpe": 0.4606,
+      "source_run": "run_20260714_092245_momentum",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_1_max_ts_std_volume_20_max_ts_mean_volume_20_1e_8_1e_8"
+    },
+    {
+      "expression": "-1 * ts_rank(rank(returns(close, 5) * volume / max(adv(20), 1e-8)) * rank(delta(amount, 10) / max(delay(amount, 10), 1e-8)), 20)",
+      "sharpe": 0.4325,
+      "source_run": "run_20260714_085418_volume_momentum",
+      "source_query": "volume momentum based alpha factors, 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_ts_rank_rank_returns_close_5_volume_max_adv_20_1e_8_rank_d"
+    },
+    {
+      "expression": "-(rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * volume, 62) / max(ts_sum(volume, 62), 1e-8)))",
+      "sharpe": 0.4324,
+      "source_run": "run_framework_mapping_5iter_20260713_001",
+      "source_query": "Generate alpha factors from 02_framework_fit_and_field_mapping.md and evolve for exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "rank_ts_sum_2_close_high_low_max_high_low_1e_8_volume_62_max"
+    },
+    {
+      "expression": "-0.5 * rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * amount, 60) / max(ts_sum(amount, 60), 1e-8)) - 0.5 * rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * volume, 60) / max(ts_sum(volume, 60), 1e-8))",
+      "sharpe": 0.4131,
+      "source_run": "run_framework_mapping_5iter_20260713_001",
+      "source_query": "Generate alpha factors from 02_framework_fit_and_field_mapping.md and evolve for exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "0_5_rank_ts_sum_2_close_high_low_max_high_low_1e_8_amount_60"
+    },
+    {
+      "expression": "-0.25 * rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * amount, 60) / max(ts_sum(amount, 60), 1e-8)) - 0.75 * rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * volume, 60) / max(ts_sum(volume, 60), 1e-8))",
+      "sharpe": 0.3986,
+      "source_run": "run_framework_mapping_5iter_20260713_001",
+      "source_query": "Generate alpha factors from 02_framework_fit_and_field_mapping.md and evolve for exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "0_25_rank_ts_sum_2_close_high_low_max_high_low_1e_8_amount_6"
+    },
+    {
+      "expression": "-1 * (open - delay(close, 1)) / max(delay(close, 1), 1e-8) * (volume / ts_mean(volume, 20))",
+      "sharpe": 0.393,
+      "source_run": "run_20260708_123256_volume_momentum",
+      "source_query": "Start with volume momentum based factors. Optimize for higher Sharpe.",
+      "worth_keeping": true,
+      "slug": "1_open_delay_close_1_max_delay_close_1_1e_8_volume_ts_mean_v"
+    },
+    {
+      "expression": "-(rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * volume, 60) / max(ts_sum(volume, 60), 1e-8)))",
+      "sharpe": 0.3887,
+      "source_run": "run_framework_mapping_5iter_20260713_001",
+      "source_query": "Generate alpha factors from 02_framework_fit_and_field_mapping.md and evolve for exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "rank_ts_sum_2_close_high_low_max_high_low_1e_8_volume_60_max"
+    },
+    {
+      "expression": "rank(1 / max(ts_std(volume, 20) / max(ts_mean(volume, 20), 1e-8), 1e-8) - 0.3 * returns(close, 20))",
+      "sharpe": 0.377,
+      "source_run": "run_20260714_092245_momentum",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_1_max_ts_std_volume_20_max_ts_mean_volume_20_1e_8_1e_8_"
+    },
+    {
+      "expression": "-1 * rank((close - ts_mean(close, 10)) / max(ts_std(close, 20), 1e-8)) * rank(ts_std(close, 3) / max(ts_std(close, 40), 1e-8))",
+      "sharpe": 0.3639,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_close_ts_mean_close_10_max_ts_std_close_20_1e_8_rank_"
+    },
+    {
+      "expression": "-(rank(ts_sum(((2 * close - high - low) / max(high - low, 1e-8)) * amount, 60) / max(ts_sum(amount, 60), 1e-8)))",
+      "sharpe": 0.3627,
+      "source_run": "run_framework_mapping_5iter_20260713_001",
+      "source_query": "Generate alpha factors from 02_framework_fit_and_field_mapping.md and evolve for exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "rank_ts_sum_2_close_high_low_max_high_low_1e_8_amount_60_max"
+    },
+    {
+      "expression": "-1 * rank((open - delay(close, 1)) / max(delay(close, 16), 1e-8))",
+      "sharpe": 0.362,
+      "source_run": "run_20260713_194409_factor_zoo_china",
+      "source_query": "Generate alpha factors from 'Taming the Factor Zoo: New Evidence from China'",
+      "worth_keeping": true,
+      "slug": "1_rank_open_delay_close_1_max_delay_close_16_1e_8"
+    },
+    {
+      "expression": "clip(-1 * rank((open - delay(close, 1)) / max(delay(close, 16), 1e-8)), -3, 3)",
+      "sharpe": 0.362,
+      "source_run": "run_20260713_194409_factor_zoo_china",
+      "source_query": "Generate alpha factors from 'Taming the Factor Zoo: New Evidence from China'",
+      "worth_keeping": true,
+      "slug": "clip_1_rank_open_delay_close_1_max_delay_close_16_1e_8_3_3"
+    },
+    {
+      "expression": "clip(-1 * rank((open - delay(close, 1)) / max(delay(close, 16), 1e-8)), 0, 1e8) * 1.5 + clip(-1 * rank((open - delay(close, 1)) / max(delay(close, 16), 1e-8)), -1e8, 0) * 0.5",
+      "sharpe": 0.362,
+      "source_run": "run_20260713_194409_factor_zoo_china",
+      "source_query": "Generate alpha factors from 'Taming the Factor Zoo: New Evidence from China'",
+      "worth_keeping": true,
+      "slug": "clip_1_rank_open_delay_close_1_max_delay_close_16_1e_8_0_1e8"
+    },
+    {
+      "expression": "-1 * rank(decay_linear(returns(close, 5), 10)) * rank(ts_std(close, 10) / max(ts_std(close, 40), 1e-8)) * rank(signed_power(ts_rank(close, 5) - ts_rank(close, 60), 1.5))",
+      "sharpe": 0.3553,
+      "source_run": "run_20260714_092342_alpha191_advanced",
+      "source_query": "Run 5 iterations making alpha according to alpha191 but more advanced. Use multi-factor interactions, volatility regime detection, decay_linear weighting, signed_power asymmetry, and correlation-based signals.",
+      "worth_keeping": true,
+      "slug": "1_rank_decay_linear_returns_close_5_10_rank_ts_std_close_10_"
+    },
+    {
+      "expression": "-1 * ts_mean(delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8), 5)",
+      "sharpe": 0.3455,
+      "source_run": "run_20260708_123810_bollinger",
+      "source_query": "Bollinger Bands factor evolution: optimize %b, bandwidth, squeeze, and breakout factors.",
+      "worth_keeping": true,
+      "slug": "1_ts_mean_delta_ts_std_close_20_5_max_ts_mean_close_20_1e_8_"
+    },
+    {
+      "expression": "-1 * rank((open - delay(close, 1)) / max(delay(close, 8), 1e-8))",
+      "sharpe": 0.3277,
+      "source_run": "run_20260713_194409_factor_zoo_china",
+      "source_query": "Generate alpha factors from 'Taming the Factor Zoo: New Evidence from China'",
+      "worth_keeping": true,
+      "slug": "1_rank_open_delay_close_1_max_delay_close_8_1e_8"
+    },
+    {
+      "expression": "rank(ts_std(returns(close, 1), 60)) + rank(-ts_sum(delta(close, 1), 120) / max(ts_sum(abs(delta(close, 1)), 120), 1e-8))",
+      "sharpe": 0.3205,
+      "source_run": "run_20260713_201938_kline_secondary_5iter",
+      "source_query": "Use 04_p0_kline_only_secondary.md to make alpha; run exactly 5 iterations; adapt the document's K-line-only indicator ideas to the factor-loop-evolve daily A-share OHLCV contract and increase Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_std_returns_close_1_60_rank_ts_sum_delta_close_1_120"
+    },
+    {
+      "expression": "-rank((ts_mean(close, 60) - ts_mean(close, 240)) / max(ts_mean(close, 240), 1e-8))",
+      "sharpe": 0.3145,
+      "source_run": "run_20260713_kline_book_5iter_201833",
+      "source_query": "Run exactly 5 factor evolution iterations to make alpha from 03_p0_kline_only_high_priority.md, adapting its K-line ideas to the daily OHLCV factor contract and increasing Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_mean_close_60_ts_mean_close_240_max_ts_mean_close_24"
+    },
+    {
+      "expression": "-1 * rank(decay_linear(returns(close, 5), 10)) * rank(ts_std(close, 20) / max(ts_std(close, 60), 1e-8)) * rank(delta(volume, 10) / max(ts_mean(volume, 20), 1e-8)) * rank(signed_power(ts_rank(close, 5) - ts_rank(close, 60), 1.5))",
+      "sharpe": 0.3077,
+      "source_run": "run_20260714_092342_alpha191_advanced",
+      "source_query": "Run 5 iterations making alpha according to alpha191 but more advanced. Use multi-factor interactions, volatility regime detection, decay_linear weighting, signed_power asymmetry, and correlation-based signals.",
+      "worth_keeping": true,
+      "slug": "1_rank_decay_linear_returns_close_5_10_rank_ts_std_close_20_"
+    },
+    {
+      "expression": "-1 * rank((open - delay(close, 1)) / max(delay(close, 1), 1e-8))",
+      "sharpe": 0.2677,
+      "source_run": "run_20260714_085523_price_literature_5iter",
+      "source_query": "Generate alpha factors from state-of-the-art price-based literature and evolve for exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "1_rank_open_delay_close_1_max_delay_close_1_1e_8"
+    },
+    {
+      "expression": "rank(-delta(close, 126) / max(ts_std(close, 126), 1e-8)) * rank(-delta(volume, 126) / max(ts_std(volume, 126), 1e-8))",
+      "sharpe": 0.2385,
+      "source_run": "run_20260713_194532_taming_factor_zoo",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_delta_close_126_max_ts_std_close_126_1e_8_rank_delta_vo"
+    },
+    {
+      "expression": "-rank((ts_mean(close, 80) - ts_mean(close, 200)) / max(ts_mean(close, 200), 1e-8))",
+      "sharpe": 0.2255,
+      "source_run": "run_20260713_kline_book_5iter_201833",
+      "source_query": "Run exactly 5 factor evolution iterations to make alpha from 03_p0_kline_only_high_priority.md, adapting its K-line ideas to the daily OHLCV factor contract and increasing Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_mean_close_80_ts_mean_close_200_max_ts_mean_close_20"
+    },
+    {
+      "expression": "rank(-delta(close, 126) / max(ts_std(close, 126), 1e-8))",
+      "sharpe": 0.2151,
+      "source_run": "run_20260713_194532_taming_factor_zoo",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_delta_close_126_max_ts_std_close_126_1e_8"
+    },
+    {
+      "expression": "-1 * rank(decay_linear(returns(close, 1), 10))",
+      "sharpe": 0.2137,
+      "source_run": "run_20260714_085523_price_literature_5iter",
+      "source_query": "Generate alpha factors from state-of-the-art price-based literature and evolve for exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "1_rank_decay_linear_returns_close_1_10"
+    },
+    {
+      "expression": "-decay_linear(returns(close, 1), 10)",
+      "sharpe": 0.2137,
+      "source_run": "run_20260708_114451_no_specific_direction",
+      "source_query": "Increase Sharpe",
+      "worth_keeping": true,
+      "slug": "decay_linear_returns_close_1_10"
+    },
+    {
+      "expression": "-1 * rank(decay_linear(returns(close, 5), 10)) * rank(ts_std(close, 20) / max(ts_std(close, 60), 1e-8)) * rank(signed_power(ts_rank(close, 5) - ts_rank(close, 60), 1.5))",
+      "sharpe": 0.2021,
+      "source_run": "run_20260714_092342_alpha191_advanced",
+      "source_query": "Run 5 iterations making alpha according to alpha191 but more advanced. Use multi-factor interactions, volatility regime detection, decay_linear weighting, signed_power asymmetry, and correlation-based signals.",
+      "worth_keeping": true,
+      "slug": "1_rank_decay_linear_returns_close_5_10_rank_ts_std_close_20_"
+    },
+    {
+      "expression": "ts_std(returns(close, 1), 20)",
+      "sharpe": -0.2068,
+      "source_run": "run_20260714_085423_volatility_5iter",
+      "source_query": "make alpha based on volatility",
+      "worth_keeping": true,
+      "slug": "ts_std_returns_close_1_20"
+    },
+    {
+      "expression": "-rank(returns(close, 60) / max(ts_std(returns(close, 1), 60), 1e-8))",
+      "sharpe": -0.21,
+      "source_run": "run_20260713_kline_book_5iter_201833",
+      "source_query": "Run exactly 5 factor evolution iterations to make alpha from 03_p0_kline_only_high_priority.md, adapting its K-line ideas to the daily OHLCV factor contract and increasing Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_returns_close_60_max_ts_std_returns_close_1_60_1e_8"
+    },
+    {
+      "expression": "rank(ts_mean(delta(close, 1) * volume, 13))",
+      "sharpe": -0.2166,
+      "source_run": "run_book_indicator_5iter_20260713_001",
+      "source_query": "Create alpha factors from 01_book_indicator_coverage_map.md and improve Sharpe over exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "rank_ts_mean_delta_close_1_volume_13"
+    },
+    {
+      "expression": "clip(rank(ts_mean(delta(close, 1) * volume, 13)), -3, 3)",
+      "sharpe": -0.2166,
+      "source_run": "run_book_indicator_5iter_20260713_001",
+      "source_query": "Create alpha factors from 01_book_indicator_coverage_map.md and improve Sharpe over exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "clip_rank_ts_mean_delta_close_1_volume_13_3_3"
+    },
+    {
+      "expression": "clip(rank(ts_mean(delta(close, 1) * volume, 13)), 0, 1e8) * 1.5 + clip(rank(ts_mean(delta(close, 1) * volume, 13)), -1e8, 0) * 0.5",
+      "sharpe": -0.2166,
+      "source_run": "run_book_indicator_5iter_20260713_001",
+      "source_query": "Create alpha factors from 01_book_indicator_coverage_map.md and improve Sharpe over exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "clip_rank_ts_mean_delta_close_1_volume_13_0_1e8_1_5_clip_ran"
+    },
+    {
+      "expression": "clip(rank(ts_mean(delta(close, 1) * volume, 13)), -3, 6)",
+      "sharpe": -0.2166,
+      "source_run": "run_book_indicator_5iter_20260713_001",
+      "source_query": "Create alpha factors from 01_book_indicator_coverage_map.md and improve Sharpe over exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "clip_rank_ts_mean_delta_close_1_volume_13_3_6"
+    },
+    {
+      "expression": "rank(ts_mean(delta(close, 1) * volume, 13)) * 1.5 + clip(rank(ts_mean(delta(close, 1) * volume, 13)), -1e8, 0) * 0.5",
+      "sharpe": -0.2166,
+      "source_run": "run_book_indicator_5iter_20260713_001",
+      "source_query": "Create alpha factors from 01_book_indicator_coverage_map.md and improve Sharpe over exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "rank_ts_mean_delta_close_1_volume_13_1_5_clip_rank_ts_mean_d"
+    },
+    {
+      "expression": "-1 * rank(returns(close, 5)) / max(ts_std(volume, 20) / ts_mean(volume, 20), 0.01)",
+      "sharpe": -0.2225,
+      "source_run": "run_20260708_123256_volume_momentum",
+      "source_query": "Start with volume momentum based factors. Optimize for higher Sharpe.",
+      "worth_keeping": true,
+      "slug": "1_rank_returns_close_5_max_ts_std_volume_20_ts_mean_volume_2"
+    },
+    {
+      "expression": "rank(ts_std(returns(close, 1), 5) / max(ts_std(returns(close, 1), 60), 1e-8)) * sign(close - open) * rank(ts_mean(amount, 5) / max(ts_mean(amount, 60), 1e-8))",
+      "sharpe": -0.2241,
+      "source_run": "run_20260714_085423_volatility_5iter",
+      "source_query": "make alpha based on volatility",
+      "worth_keeping": true,
+      "slug": "rank_ts_std_returns_close_1_5_max_ts_std_returns_close_1_60_"
+    },
+    {
+      "expression": "rank(ts_std(returns(close, 1), 90))",
+      "sharpe": -0.2242,
+      "source_run": "run_20260713_201938_kline_secondary_5iter",
+      "source_query": "Use 04_p0_kline_only_secondary.md to make alpha; run exactly 5 iterations; adapt the document's K-line-only indicator ideas to the factor-loop-evolve daily A-share OHLCV contract and increase Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_std_returns_close_1_90"
+    },
+    {
+      "expression": "-1 * rank(delta(close, 5) / max(high - low, 1e-8)) * rank(volume / ts_mean(volume, 20))",
+      "sharpe": -0.2286,
+      "source_run": "run_20260708_123256_volume_momentum",
+      "source_query": "Start with volume momentum based factors. Optimize for higher Sharpe.",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_close_5_max_high_low_1e_8_rank_volume_ts_mean_v"
+    },
+    {
+      "expression": "-1 * rank((close - ts_mean(close, 20)) / max(2 * ts_std(close, 20), 1e-8)) * (volume / max(ts_mean(volume, 20), 1e-8)) - 0.5 * delta(ts_std(close, 20), 5) / max(ts_mean(close, 20), 1e-8)",
+      "sharpe": -0.2299,
+      "source_run": "run_20260708_123810_bollinger",
+      "source_query": "Bollinger Bands factor evolution: optimize %b, bandwidth, squeeze, and breakout factors.",
+      "worth_keeping": true,
+      "slug": "1_rank_close_ts_mean_close_20_max_2_ts_std_close_20_1e_8_vol"
+    },
+    {
+      "expression": "-1 * rank(ts_rank(close, 20)) * rank(correlation(rank(close), rank(volume), 10)) * rank(delta(amount, 5) / max(ts_mean(amount, 20), 1e-8))",
+      "sharpe": -0.2332,
+      "source_run": "run_20260714_092342_alpha191_advanced",
+      "source_query": "Run 5 iterations making alpha according to alpha191 but more advanced. Use multi-factor interactions, volatility regime detection, decay_linear weighting, signed_power asymmetry, and correlation-based signals.",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_rank_close_20_rank_correlation_rank_close_rank_vol"
+    },
+    {
+      "expression": "-rank(ts_mean(sign(close - delay(close, 1)) * (high - low) / max(ts_mean(high - low, 20), 1e-8), 5)) - rank((close - (ts_max(delay(high, 1), 60) + ts_min(delay(low, 1), 60)) / 2) / max(ts_max(delay(high, 1), 60) - ts_min(delay(low, 1), 60), 1e-8))",
+      "sharpe": -0.2342,
+      "source_run": "run_20260713_kline_book_5iter_201833",
+      "source_query": "Run exactly 5 factor evolution iterations to make alpha from 03_p0_kline_only_high_priority.md, adapting its K-line ideas to the daily OHLCV factor contract and increasing Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_mean_sign_close_delay_close_1_high_low_max_ts_mean_h"
+    },
+    {
+      "expression": "-1 * rank(ts_mean((close - open) / max(close, 1e-8), 3))",
+      "sharpe": -0.2418,
+      "source_run": "run_p1_current_bar_extended_5iter_20260713_202007",
+      "source_query": "make alpha from 05_p1_current_bar_extended.md; increase Sharpe; run exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_mean_close_open_max_close_1e_8_3"
+    },
+    {
+      "expression": "-rank((close - (ts_max(delay(high, 1), 180) + ts_min(delay(low, 1), 180)) / 2) / max(ts_max(delay(high, 1), 180) - ts_min(delay(low, 1), 180), 1e-8))",
+      "sharpe": -0.2478,
+      "source_run": "run_20260713_kline_book_5iter_201833",
+      "source_query": "Run exactly 5 factor evolution iterations to make alpha from 03_p0_kline_only_high_priority.md, adapting its K-line ideas to the daily OHLCV factor contract and increasing Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_close_ts_max_delay_high_1_180_ts_min_delay_low_1_180_2_"
+    },
+    {
+      "expression": "-1 * rank(ts_mean((close - open) / max(high - low, 1e-8), 4)) * (1 - rank(ts_mean((high - low) / max(close, 1e-8), 4) / max(ts_mean((high - low) / max(close, 1e-8), 20), 1e-8)))",
+      "sharpe": -0.2598,
+      "source_run": "run_p1_current_bar_extended_5iter_20260713_202007",
+      "source_query": "make alpha from 05_p1_current_bar_extended.md; increase Sharpe; run exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_mean_close_open_max_high_low_1e_8_4_1_rank_ts_mean"
+    },
+    {
+      "expression": "-1 * rank(returns(close, 5)) * rank((close - ts_min(close, 20)) / max(ts_max(close, 20) - ts_min(close, 20), 1e-8))",
+      "sharpe": -0.2645,
+      "source_run": "run_20260714_085523_price_literature_5iter",
+      "source_query": "Generate alpha factors from state-of-the-art price-based literature and evolve for exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "1_rank_returns_close_5_rank_close_ts_min_close_20_max_ts_max"
+    },
+    {
+      "expression": "rank(-ts_sum(delta(close, 1), 60) / max(ts_sum(abs(delta(close, 1)), 60), 1e-8))",
+      "sharpe": -0.2699,
+      "source_run": "run_20260713_201938_kline_secondary_5iter",
+      "source_query": "Use 04_p0_kline_only_secondary.md to make alpha; run exactly 5 iterations; adapt the document's K-line-only indicator ideas to the factor-loop-evolve daily A-share OHLCV contract and increase Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_sum_delta_close_1_60_max_ts_sum_abs_delta_close_1_60"
+    },
+    {
+      "expression": "-1 * rank(ts_mean(volume, 10) / max(ts_mean(volume, 40), 1e-8) - 1) * rank(returns(close, 10))",
+      "sharpe": -0.2759,
+      "source_run": "run_p1_current_bar_extended_5iter_20260713_202007",
+      "source_query": "make alpha from 05_p1_current_bar_extended.md; increase Sharpe; run exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_mean_volume_10_max_ts_mean_volume_40_1e_8_1_rank_r"
+    },
+    {
+      "expression": "-1 * rank(ts_mean((close - open) / max(high - low, 1e-8), 4)) * rank(ts_mean(volume, 10) / max(ts_mean(volume, 40), 1e-8))",
+      "sharpe": -0.2764,
+      "source_run": "run_p1_current_bar_extended_5iter_20260713_202007",
+      "source_query": "make alpha from 05_p1_current_bar_extended.md; increase Sharpe; run exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_mean_close_open_max_high_low_1e_8_4_rank_ts_mean_v"
+    },
+    {
+      "expression": "rank(-(close - ts_mean(close, 30)) / max(ts_std(close, 30), 1e-8))",
+      "sharpe": -0.2865,
+      "source_run": "run_20260713_201938_kline_secondary_5iter",
+      "source_query": "Use 04_p0_kline_only_secondary.md to make alpha; run exactly 5 iterations; adapt the document's K-line-only indicator ideas to the factor-loop-evolve daily A-share OHLCV contract and increase Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_close_ts_mean_close_30_max_ts_std_close_30_1e_8"
+    },
+    {
+      "expression": "rank(ts_mean(returns(close, 5), 60))",
+      "sharpe": -0.288,
+      "source_run": "run_20260713_194532_taming_factor_zoo",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_ts_mean_returns_close_5_60"
+    },
+    {
+      "expression": "-1 * rank(ts_mean((2 * close - high - low) / max(high - low, 1e-8), 2))",
+      "sharpe": -0.2916,
+      "source_run": "run_p1_current_bar_extended_5iter_20260713_202007",
+      "source_query": "make alpha from 05_p1_current_bar_extended.md; increase Sharpe; run exactly 5 iterations",
+      "worth_keeping": true,
+      "slug": "1_rank_ts_mean_2_close_high_low_max_high_low_1e_8_2"
+    },
+    {
+      "expression": "rank((open / max(delay(close, 1), 1e-8) - 1) * (1 - abs(close / max(open, 1e-8) - 1) / max(abs(open / max(delay(close, 1), 1e-8) - 1), 1e-8)))",
+      "sharpe": -0.2952,
+      "source_run": "run_20260714_092245_momentum",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_open_max_delay_close_1_1e_8_1_1_abs_close_max_open_1e_8"
+    },
+    {
+      "expression": "-1 * rank(decay_linear(returns(close, 5), 10)) * rank(ts_std(close, 20) / max(ts_std(close, 60), 1e-8)) * rank(signed_power(ts_rank(close, 5) - ts_rank(close, 60), 1.5)) * rank(correlation(rank(close), rank(volume), 10))",
+      "sharpe": -0.3044,
+      "source_run": "run_20260714_092342_alpha191_advanced",
+      "source_query": "Run 5 iterations making alpha according to alpha191 but more advanced. Use multi-factor interactions, volatility regime detection, decay_linear weighting, signed_power asymmetry, and correlation-based signals.",
+      "worth_keeping": true,
+      "slug": "1_rank_decay_linear_returns_close_5_10_rank_ts_std_close_20_"
+    },
+    {
+      "expression": "-1 * ts_mean((open - delay(close, 1)) / max(delay(close, 1), 1e-8), 3) * (volume / ts_mean(volume, 20))",
+      "sharpe": -0.3135,
+      "source_run": "run_20260708_123256_volume_momentum",
+      "source_query": "Start with volume momentum based factors. Optimize for higher Sharpe.",
+      "worth_keeping": true,
+      "slug": "1_ts_mean_open_delay_close_1_max_delay_close_1_1e_8_3_volume"
+    },
+    {
+      "expression": "-1 * rank(ts_mean(returns(close, 5), 3)) * rank((high - close) / max(high - low, 1e-8))",
+      "sharpe": -0.3236,
+      "source_run": "run_20260714_085523_price_literature_5iter",
+      "source_query": "Generate alpha factors from state-of-the-art price-based literature and evolve for exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "1_rank_ts_mean_returns_close_5_3_rank_high_close_max_high_lo"
+    },
+    {
+      "expression": "rank(-ts_sum(delta(close, 1), 20) / max(ts_sum(abs(delta(close, 1)), 20), 1e-8))",
+      "sharpe": -0.3267,
+      "source_run": "run_20260713_201938_kline_secondary_5iter",
+      "source_query": "Use 04_p0_kline_only_secondary.md to make alpha; run exactly 5 iterations; adapt the document's K-line-only indicator ideas to the factor-loop-evolve daily A-share OHLCV contract and increase Sharpe.",
+      "worth_keeping": true,
+      "slug": "rank_ts_sum_delta_close_1_20_max_ts_sum_abs_delta_close_1_20"
+    },
+    {
+      "expression": "-ts_zscore(ts_std(returns(close, 1), 20), 60)",
+      "sharpe": -0.339,
+      "source_run": "run_20260714_085423_volatility_5iter",
+      "source_query": "make alpha based on volatility",
+      "worth_keeping": true,
+      "slug": "ts_zscore_ts_std_returns_close_1_20_60"
+    },
+    {
+      "expression": "-ts_mean(((high - low) / max(open, 1e-8)) / max(volume, 1e-8), 20)",
+      "sharpe": -0.3437,
+      "source_run": "run_20260708_122450_close_minus_open_over_volume",
+      "source_query": "(close - open) / volume",
+      "worth_keeping": false,
+      "slug": "ts_mean_high_low_max_open_1e_8_max_volume_1e_8_20"
+    },
+    {
+      "expression": "-ts_mean(((high - low) / max(open, 1e-8)) / max(volume, 1e-8), 10)",
+      "sharpe": -0.3531,
+      "source_run": "run_20260708_122450_close_minus_open_over_volume",
+      "source_query": "(close - open) / volume",
+      "worth_keeping": false,
+      "slug": "ts_mean_high_low_max_open_1e_8_max_volume_1e_8_10"
+    },
+    {
+      "expression": "ts_rank((close - open) / adv(20), 10)",
+      "sharpe": -0.3729,
+      "source_run": "run_20260708_122450_close_minus_open_over_volume",
+      "source_query": "(close - open) / volume",
+      "worth_keeping": false,
+      "slug": "ts_rank_close_open_adv_20_10"
+    },
+    {
+      "expression": "-correlation(close, volume, 20)",
+      "sharpe": -0.3738,
+      "source_run": "run_20260708_114451_no_specific_direction",
+      "source_query": "Increase Sharpe",
+      "worth_keeping": true,
+      "slug": "correlation_close_volume_20"
+    },
+    {
+      "expression": "(close - open) / max(volume, 1e-8)",
+      "sharpe": -0.3839,
+      "source_run": "run_20260708_122450_close_minus_open_over_volume",
+      "source_query": "(close - open) / volume",
+      "worth_keeping": false,
+      "slug": "close_open_max_volume_1e_8"
+    },
+    {
+      "expression": "-ts_mean(((close - open) / max(open, 1e-8)) / max(volume, 1e-8), 10)",
+      "sharpe": -0.384,
+      "source_run": "run_20260708_122450_close_minus_open_over_volume",
+      "source_query": "(close - open) / volume",
+      "worth_keeping": false,
+      "slug": "ts_mean_close_open_max_open_1e_8_max_volume_1e_8_10"
+    },
+    {
+      "expression": "-1 * rank(ts_mean(power(returns(close, 1), 3), 60) / max(power(ts_std(returns(close, 1), 60), 3), 1e-8))",
+      "sharpe": -0.3885,
+      "source_run": "run_20260714_085523_price_literature_5iter",
+      "source_query": "Generate alpha factors from state-of-the-art price-based literature and evolve for exactly 5 iterations",
+      "worth_keeping": false,
+      "slug": "1_rank_ts_mean_power_returns_close_1_3_60_max_power_ts_std_r"
+    },
+    {
+      "expression": "-returns(close, 20) / (ts_std(returns(close, 1), 20) + 0.0001)",
+      "sharpe": -0.4028,
+      "source_run": "run_20260708_114451_no_specific_direction",
+      "source_query": "Increase Sharpe",
+      "worth_keeping": true,
+      "slug": "returns_close_20_ts_std_returns_close_1_20_0_0001"
+    },
+    {
+      "expression": "rank(ts_mean(returns(close, 5) / max(ts_std(returns(close, 1), 20), 1e-8), 60))",
+      "sharpe": -0.4177,
+      "source_run": "run_20260713_194532_taming_factor_zoo",
+      "source_query": "",
+      "worth_keeping": true,
+      "slug": "rank_ts_mean_returns_close_5_max_ts_std_returns_close_1_20_1"
+    },
+    {
+      "expression": "-decay_linear(correlation(close, volume, 10), 20)",
+      "sharpe": -0.4206,
+      "source_run": "run_20260708_114451_no_specific_direction",
+      "source_query": "Increase Sharpe",
+      "worth_keeping": true,
+      "slug": "decay_linear_correlation_close_volume_10_20"
+    },
+    {
+      "expression": "-correlation(close, volume, 20) - 0.4 * (high - low) / (close + 0.0001)",
+      "sharpe": -0.4289,
+      "source_run": "run_20260708_114451_no_specific_direction",
+      "source_query": "Increase Sharpe",
+      "worth_keeping": true,
+      "slug": "correlation_close_volume_20_0_4_high_low_close_0_0001"
+    },
+    {
+      "expression": "rank((high - low) / max(close, 1e-8))",
+      "sharpe": -0.4368,
+      "source_run": "run_20260714_085423_volatility_5iter",
+      "source_query": "make alpha based on volatility",
+      "worth_keeping": true,
+      "slug": "rank_high_low_max_close_1e_8"
+    },
+    {
+      "expression": "ts_std(max(returns(close, 1), 0), 20) - ts_std(min(returns(close, 1), 0), 20)",
+      "sharpe": -0.4461,
+      "source_run": "run_20260714_085423_volatility_5iter",
+      "source_query": "make alpha based on volatility",
+      "worth_keeping": true,
+      "slug": "ts_std_max_returns_close_1_0_20_ts_std_min_returns_close_1_0"
+    }
+  ]
+}

@@ -78,6 +78,77 @@ Other useful outputs:
 - `evolution_diagram.md`: visual evolution summary.
 - `trading_data/`: portfolio returns, IC series, and positions.
 
+## Build Alpha Library
+
+After running the evolution pipeline multiple times, the `output/` directory
+will contain many `run_*` folders. Use `build_alpha_library.py` to merge all
+`final_summary.json` files into a unified alpha library, deduplicating by
+expression (keeping the best Sharpe for each).
+
+### Usage
+
+```bash
+# Basic: scan all run_* under output/ and generate alpha_library.json
+python scripts/build_alpha_library.py
+
+# Custom output path
+python scripts/build_alpha_library.py --output my_library.json
+
+# Only include factors with Sharpe ≥ 0.3
+python scripts/build_alpha_library.py --min-sharpe 0.3
+
+# Custom output directory
+python scripts/build_alpha_library.py --output-dir /path/to/output
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--output` | Output JSON file path | `alpha_library.json` (skill root) |
+| `--min-sharpe` | Minimum Sharpe threshold; factors below are excluded | No limit |
+| `--output-dir` | Directory containing `run_*` folders | `./output/` |
+
+### Output Format
+
+The generated `alpha_library.json` structure:
+
+```json
+{
+  "meta": {
+    "total_factors": 60,
+    "total_runs_scanned": 12,
+    "total_runs_contributing": 12,
+    "positive_sharpe_count": 28,
+    "best_sharpe": 0.8656,
+    "worst_sharpe": -0.4289,
+    "min_sharpe_filter": null
+  },
+  "entries": [
+    {
+      "expression": "-1 * rank(delta(returns(close, 10), 5) / ...)",
+      "sharpe": 0.8656,
+      "source_run": "run_20260713_194041_model_creativity",
+      "source_query": "use your creativity to generate powerful alphas",
+      "worth_keeping": true,
+      "slug": "1_rank_delta_returns_close_10_5_max_..."
+    }
+  ]
+}
+```
+
+Each factor entry contains:
+
+- `expression` — the factor expression.
+- `sharpe` — annualized Sharpe ratio.
+- `source_run` — source run directory name.
+- `source_query` — the original query that triggered the run.
+- `worth_keeping` — whether the run was deemed worth keeping.
+- `slug` — a short identifier derived from the expression.
+
+Factors are sorted by Sharpe descending. The `meta` block provides aggregate
+statistics for a quick quality assessment of the library.
+
 ## Configuration
 
 Edit `config.json` to change backtest dates, universe, costs, stopping rules,
