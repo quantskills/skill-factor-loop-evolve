@@ -161,3 +161,6 @@ python scripts/build_alpha_library.py --output-dir /path/to/output
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE).
+
+
+Pandadata 兼容维护：[abgyjaguo](https://github.com/abgyjaguo)，保留原项目作者署名。
