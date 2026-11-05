@@ -493,3 +493,7 @@ pip install panda_data/panda_data-0.1.0-py3-none-any.whl
 - `scripts/knowledge_base.py` — experience memory management.
 - `scripts/generate_candidates.py` — controlled variant generation.
 - `scripts/optimizer.py` — optimization loop coordinator.
+
+## Pandadata compatibility
+
+[Pandadata 1.0.6 compatibility](references/pandadata-compatibility.md) — exact SDK baseline, validation scope, and shared guidance for all supported agent runtimes.

@@ -167,3 +167,6 @@ CSI 500", that request should override the config for the current run.
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE).
+
+
+Pandadata compatibility maintenance: [abgyjaguo](https://github.com/abgyjaguo). Existing authorship is retained.
